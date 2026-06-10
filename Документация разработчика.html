@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NexTT — Подсказки разработчика</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+            background: #eef2f5;
+            color: #1a2a3a;
+            line-height: 1.5;
+            font-size: 16px;
+        }
+
+        .docs-container {
+            display: flex;
+            max-width: 1400px;
+            margin: 0 auto;
+            background: #ffffff;
+            min-height: 100vh;
+            box-shadow: 0 0 20px rgba(0,0,0,0.05);
+        }
+
+        /* ========== БОКОВОЕ ОГЛАВЛЕНИЕ ========== */
+        .sidebar {
+            width: 300px;
+            background: #1e2a3a;
+            color: #e0e8ed;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            padding: 25px 25px;
+            border-bottom: 1px solid #2d3e4e;
+        }
+
+        .sidebar-header h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+
+        .sidebar-header p {
+            font-size: 0.9rem;
+            color: #8aa0b0;
+        }
+
+        .toc {
+            list-style: none;
+            padding: 20px 0 40px;
+        }
+
+        .toc-item {
+            margin: 3px 0;
+        }
+
+        .toc-item a {
+            display: block;
+            padding: 10px 25px;
+            color: #c0d0dd;
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            border-left: 3px solid transparent;
+            transition: all 0.15s;
+        }
+
+        .toc-item a:hover {
+            background: #2d3e4e;
+            color: #fff;
+        }
+
+        .toc-item.active a {
+            background: #2d3e4e;
+            border-left-color: #4a9eff;
+            color: #fff;
+        }
+
+        .toc-sub {
+            list-style: none;
+            padding-left: 45px;
+            margin: 5px 0 10px;
+        }
+
+        .toc-sub li a {
+            font-size: 0.85rem;
+            padding: 6px 25px;
+            font-weight: 400;
+        }
+
+        /* ========== ОСНОВНОЙ КОНТЕНТ ========== */
+        .content {
+            flex: 1;
+            padding: 40px 50px;
+            max-width: calc(100% - 300px);
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            font-weight: 700;
+            color: #1a2a3a;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #4a9eff;
+            display: inline-block;
+        }
+
+        h2 {
+            font-size: 1.6rem;
+            font-weight: 600;
+            color: #1a5f7a;
+            margin-top: 35px;
+            margin-bottom: 18px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #dce5ec;
+        }
+
+        h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #2c5a6e;
+            margin-top: 25px;
+            margin-bottom: 14px;
+        }
+
+        h4 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #3a6b80;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        p {
+            margin-bottom: 16px;
+            color: #2c3e44;
+            font-size: 1rem;
+            line-height: 1.55;
+        }
+
+        .file-path {
+            background: #eef2f5;
+            padding: 12px 18px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.95rem;
+            margin: 16px 0;
+            border-left: 4px solid #4a9eff;
+            color: #1a2a3a;
+            word-break: break-all;
+        }
+
+        .code-block {
+            margin: 20px 0;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #1e1e1e;
+            border: 1px solid #3d3d3d;
+        }
+
+        .code-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #2d2d2d;
+            padding: 10px 18px;
+            border-bottom: 1px solid #3d3d3d;
+        }
+
+        .code-header span {
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+
+        .copy-btn {
+            background: #3d3d3d;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #ddd;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .copy-btn:hover {
+            background: #4a9eff;
+            color: #fff;
+        }
+
+        pre {
+            margin: 0;
+            padding: 18px;
+            background: #1e1e1e;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: #d4d4d4;
+        }
+
+        code {
+            font-family: 'Courier New', monospace;
+            background: #eef2f5;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: #c7254e;
+        }
+
+        pre code {
+            background: transparent;
+            padding: 0;
+            color: inherit;
+        }
+
+        .guide-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 0.95rem;
+        }
+
+        .guide-table th {
+            background: #1a5f7a;
+            color: #fff;
+            padding: 12px 15px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .guide-table td {
+            padding: 10px 15px;
+            border-bottom: 1px solid #dce5ec;
+            font-size: 0.95rem;
+        }
+
+        .guide-table tr:hover {
+            background: #f8fafc;
+        }
+
+        .note {
+            background: #e8f4fd;
+            border-left: 4px solid #4a9eff;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+
+        .warning {
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+
+        .tip {
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+
+        .checklist {
+            background: #f9fafb;
+            padding: 20px 25px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 1px solid #dce5ec;
+        }
+
+        .checklist li {
+            list-style: none;
+            padding: 8px 0;
+            font-size: 1rem;
+        }
+
+        .checklist li::before {
+            content: "☐ ";
+            font-size: 1.1rem;
+            color: #1a5f7a;
+        }
+
+        ul, ol {
+            margin: 12px 0 18px 25px;
+        }
+
+        li {
+            margin: 6px 0;
+            font-size: 1rem;
+        }
+
+        a {
+            color: #4a9eff;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .logic-box {
+            background: #f0f6fa;
+            border-radius: 12px;
+            padding: 20px 25px;
+            margin: 20px 0;
+            border: 1px solid #cce0eb;
+        }
+
+        .logic-step {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            align-items: flex-start;
+        }
+
+        .logic-num {
+            background: #1a5f7a;
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        .logic-text {
+            flex: 1;
+        }
+
+        .compare-good {
+            background: #e8f5e9;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .compare-bad {
+            background: #ffebee;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        footer {
+            margin-top: 50px;
+            padding: 25px 0;
+            border-top: 1px solid #dce5ec;
+            text-align: center;
+            font-size: 0.85rem;
+            color: #7a8a9a;
+        }
+
+        .back-to-top {
+            position: fixed;
+            bottom: 25px;
+            right: 25px;
+            background: #1a5f7a;
+            color: #fff;
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            font-size: 1.3rem;
+            opacity: 0.7;
+            transition: opacity 0.15s;
+        }
+
+        .back-to-top:hover {
+            opacity: 1;
+        }
+
+        @media (max-width: 900px) {
+            .sidebar { width: 260px; }
+            .content { padding: 30px 35px; }
+            h1 { font-size: 1.8rem; }
+            h2 { font-size: 1.4rem; }
+            h3 { font-size: 1.2rem; }
+            p, li, .note, .warning, .tip, .guide-table td, .guide-table th, .logic-text {
+                font-size: 0.9rem;
+            }
+        }
+
+        @media (max-width: 700px) {
+            .docs-container { flex-direction: column; }
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: relative;
+            }
+            .content { max-width: 100%; padding: 25px; }
+            .logic-step { flex-direction: column; gap: 10px; }
+        }
+    </style>
+</head>
+<body>
+<div class="docs-container">
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h2>NexTT</h2>
+            <p>Подсказки для разработчика</p>
+        </div>
+        <ul class="toc" id="toc">
+            <li class="toc-item"><a href="#section1">1. Введение</a></li>
+            <li class="toc-item"><a href="#section2">2. Где что лежит</a></li>
+            <li class="toc-item"><a href="#section3">3. Обновить прайс (Мономатрица)</a></li>
+            <li class="toc-item"><a href="#section4">4. Обновить каталог (Все_категории)</a></li>
+            <li class="toc-item"><a href="#section5">5. Выпустить новую версию</a>
+                <ul class="toc-sub"><li><a href="#section5.1">5.1. Логика работы версий</a></li><li><a href="#section5.2">5.2. Что менять в программе</a></li><li><a href="#section5.3">5.3. Что менять на GitHub</a></li></ul>
+            </li>
+            <li class="toc-item"><a href="#section6">6. Собрать EXE (build.py)</a>
+                <ul class="toc-sub"><li><a href="#section6.1">6.1. Обычная сборка</a></li><li><a href="#section6.2">6.2. Dev-сборка</a></li></ul>
+            </li>
+            <li class="toc-item"><a href="#section7">7. Включить логирование</a></li>
+            <li class="toc-item"><a href="#section8">8. Включить экспериментальную кнопку</a></li>
+            <li class="toc-item"><a href="#section9">9. Чек-лист релиза</a></li>
+            <li class="toc-item"><a href="#section10">10. Проблемы и решения</a></li>
+        </ul>
+    </aside>
+
+    <main class="content">
+        <h1>NexTT — подсказки для разработчика</h1>
+        <p style="font-size: 1.05rem; margin-bottom: 25px;">Документ для тех, кто периодически вносит изменения в программу. Здесь всё, что нужно помнить: где менять прайсы, как собрать новую версию, где включать логирование.</p>
+
+        <!-- ==================== 1. ВВЕДЕНИЕ ==================== -->
+        <div id="section1">
+            <h2>1. Введение</h2>
+            <p>Этот документ — ваша <strong>памятка</strong>. Вы не обязаны помнить всё, что описано ниже. Просто откройте этот файл, когда нужно что-то сделать, и следуйте инструкциям шаг за шагом.</p>
+            <div class="note">📌 <strong>Для кого:</strong> для человека, который периодически обновляет программу NexTT.</div>
+            <div class="tip">💡 <strong>Совет:</strong> Открывается любым браузером. Сохраните файл в папке с проектом.</div>
+        </div>
+
+        <!-- ==================== 2. ГДЕ ЧТО ЛЕЖИТ ==================== -->
+        <div id="section2">
+            <h2>2. Где что лежит (полные пути)</h2>
+            <p>Все пути указаны относительно <strong>корневой папки проекта</strong> — это папка, в которой лежат папки <code>nextt/</code> и <code>resources/</code>.</p>
+            <div class="file-path"><strong>📁 Корень проекта:</strong> <code>C:\Projects\...\NexTT\</code></div>
+            
+            <h3>Важные файлы и папки</h3>
+            <table class="guide-table">
+                <thead><tr><th>Файл / Папка</th><th>Для чего нужен</th></tr></thead>
+                <tbody>
+                    <tr><td><code>resources/Мономатрица.xlsx</code></td><td>Прайс-лист радиаторов. Здесь цены, мощность, вес.</td></tr>
+                    <tr><td><code>resources/Все_категории.xlsx</code></td><td>База оборудования (котлы, бойлеры, дымоходы, запчасти).</td></tr>
+                    <tr><td><code>nextt/utils/update_checker.py</code></td><td>Версия программы. Меняете при выпуске новой версии.</td></tr>
+                    <tr><td><code>nextt/experimental/paste_handler.py</code></td><td>Включение/выключение экспериментальной кнопки «Вставить из буфера».</td></tr>
+                    <tr><td><code>nextt/app.py</code></td><td>Уровень логирования (INFO / WARNING).</td></tr>
+                    <tr><td><code>build.py</code></td><td>Скрипт сборки EXE-файла. Запускаете, когда нужно собрать программу.</td></tr>
+                    <tr><td><code>settings.json</code></td><td>Настройки пользователя (окно, масштаб). Не трогайте.</td></tr>
+                </tbody>
+            </table>
+            <div class="tip">💡 <strong>Запомните:</strong> ресурсы (Excel-файлы) лежат в папке <code>resources/</code>. Если замените их здесь, они попадут в новую сборку.</div>
+        </div>
+
+        <!-- ==================== 3. ОБНОВИТЬ ПРАЙС ==================== -->
+        <div id="section3">
+            <h2>3. Как обновить прайс-лист радиаторов</h2>
+            <p><strong>Когда нужно:</strong> изменились цены, мощность или вес радиаторов. Файл называется <code>Мономатрица.xlsx</code>.</p>
+            <h3>Пошаговая инструкция:</h3>
+            <ol>
+                <li>Откройте папку <strong>корень проекта</strong>.</li>
+                <li>Зайдите в папку <code>resources/</code>.</li>
+                <li>Найдите файл <code>Мономатрица.xlsx</code>.</li>
+                <li><strong>Замените</strong> его на новый файл (перетащите или скопируйте с заменой).</li>
+                <li><strong>Важно:</strong> Если вы будете собирать EXE, новый файл автоматически попадёт в сборку.</li>
+            </ol>
+            <div class="note">📌 <strong>Примечание:</strong> Можно открыть файл Excel, отредактировать прямо в нём и сохранить. Главное — сохранить то же имя файла.</div>
+            <div class="warning">⚠️ <strong>Не переименовывайте файл!</strong> Программа ищет файл с точным именем <code>Мономатрица.xlsx</code>.</div>
+        </div>
+
+        <!-- ==================== 4. ОБНОВИТЬ КАТАЛОГ ==================== -->
+        <div id="section4">
+            <h2>4. Как обновить каталог оборудования</h2>
+            <p><strong>Когда нужно:</strong> добавились новые котлы, бойлеры, дымоходы или запчасти. Файл называется <code>Все_категории.xlsx</code>.</p>
+            <h3>Пошаговая инструкция:</h3>
+            <ol>
+                <li>Откройте папку <strong>корень проекта</strong>.</li>
+                <li>Зайдите в папку <code>resources/</code>.</li>
+                <li>Найдите файл <code>Все_категории.xlsx</code>.</li>
+                <li><strong>Замените</strong> его на новый файл (или отредактируйте существующий).</li>
+                <li><strong>Важно:</strong> В файле должны быть колонки: <code>Артикул</code>, <code>Наименование</code>, <code>Цена</code>, <code>Иерархия</code> (категория).</li>
+            </ol>
+            <div class="tip">💡 <strong>Подсказка:</strong> Если вы добавляете новые позиции, убедитесь, что в колонке «Иерархия» указана правильная категория (запчасти, котлы, дымоходы и т.д.).</div>
+        </div>
+
+        <!-- ==================== 5. ВЫПУСТИТЬ НОВУЮ ВЕРСИЮ ==================== -->
+        <div id="section5">
+            <h2>5. Как выпустить новую версию программы</h2>
+            <p><strong>Когда нужно:</strong> вы обновили прайсы или добавили новые функции — нужно, чтобы пользователи узнали об этом.</p>
+            
+            <!-- 5.1. ЛОГИКА РАБОТЫ ВЕРСИЙ (ПОДРОБНО) -->
+            <h3 id="section5.1">5.1. Логика работы версий (как это работает)</h3>
+            <div class="logic-box">
+                <p style="font-weight: 600; margin-bottom: 15px;">🎯 Зачем вообще нужна проверка обновлений?</p>
+                <p>Когда вы выпускаете новую версию программы, пользователи должны об этом узнать. Для этого программа при каждом запуске <strong>сравнивает свою версию с версией на GitHub</strong>. Если на GitHub версия новее — появляется окно с предложением обновиться.</p>
+            </div>
+
+            <div class="logic-box">
+                <p style="font-weight: 600; margin-bottom: 15px;">📊 Что где хранится?</p>
+                <div class="logic-step">
+                    <div class="logic-num">1</div>
+                    <div class="logic-text">
+                        <strong>Внутри программы (на вашем компьютере)</strong><br>
+                        Файл <code>nextt/utils/update_checker.py</code> содержит два значения:
+                        <pre style="margin: 10px 0; background: #1e1e1e; padding: 10px; border-radius: 6px;"><code>CURRENT_VERSION = "2.1"      # ← текст, который увидит пользователь
+CURRENT_VERSION_CODE = 21     # ← число, с которым программа сравнивает</code></pre>
+                        <p><strong>Что это значит:</strong> программа «знает», что её версия — 2.1 (показывать людям) и её числовой код — 21 (использовать для сравнения).</p>
+                    </div>
+                </div>
+                <div class="logic-step">
+                    <div class="logic-num">2</div>
+                    <div class="logic-text">
+                        <strong>На GitHub (в интернете)</strong><br>
+                        Файл <code>version.json</code> содержит такие же два значения, но для самой последней версии:
+                        <pre style="margin: 10px 0; background: #1e1e1e; padding: 10px; border-radius: 6px;"><code>{
+    "version": "2.2",
+    "version_code": 22
+}</code></pre>
+                        <p><strong>Что это значит:</strong> в интернете лежит информация, что последняя доступная версия — 2.2 с кодом 22.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="logic-box">
+                <p style="font-weight: 600; margin-bottom: 15px;">⚙️ Как происходит сравнение (по шагам)</p>
+                <div class="logic-step">
+                    <div class="logic-num">1</div>
+                    <div class="logic-text">Пользователь запускает программу версии 2.1 (код 21).</div>
+                </div>
+                <div class="logic-step">
+                    <div class="logic-num">2</div>
+                    <div class="logic-text">Программа скачивает файл <code>version.json</code> с GitHub.</div>
+                </div>
+                <div class="logic-step">
+                    <div class="logic-num">3</div>
+                    <div class="logic-text">Программа смотрит на <code>version_code</code> из интернета (22).</div>
+                </div>
+                <div class="logic-step">
+                    <div class="logic-num">4</div>
+                    <div class="logic-text">Программа сравнивает: 22 > 21? <strong>ДА</strong> → значит, есть новая версия.</div>
+                </div>
+                <div class="logic-step">
+                    <div class="logic-num">5</div>
+                    <div class="logic-text">Программа берёт <code>"version"</code> из интернета (2.2) и показывает окно: «Доступна новая версия 2.2».</div>
+                </div>
+                <div class="tip">💡 <strong>Почему нужен именно числовой код?</strong><br>
+                Компьютер плохо сравнивает текст "2.10" и "2.2" — по буквам "2.10" меньше, чем "2.2", потому что "1" меньше "2". А числа 210 и 22 сравниваются правильно: 210 > 22. Поэтому мы используем числовой код для сравнения, а текст — только для показа пользователю.</div>
+            </div>
+
+            <div class="logic-box">
+                <p style="font-weight: 600; margin-bottom: 15px;">✅ Примеры правильного сравнения</p>
+                <div class="compare-good">✔ Программа 2.1 (код 21), на GitHub код 22 → 22 > 21 → <strong>обновление есть</strong></div>
+                <div class="compare-good">✔ Программа 2.5 (код 25), на GitHub код 30 → 30 > 25 → <strong>обновление есть</strong></div>
+                <div class="compare-good">✔ Программа 3.0 (код 30), на GitHub код 30 → 30 = 30 → <strong>обновления нет</strong> (версии одинаковые)</div>
+            </div>
+
+            <div class="logic-box">
+                <p style="font-weight: 600; margin-bottom: 15px;">❌ Ошибки — что будет, если неправильно указать версии</p>
+                <div class="compare-bad">✖ В программе код 22, на GitHub код 21 → программа думает, что у неё версия новее, обновление не покажет</div>
+                <div class="compare-bad">✖ В программе код 21, на GitHub код 21 (но версия 2.2) → программа не увидит обновление, потому что коды одинаковые</div>
+                <div class="compare-bad">✖ Забыли обновить version.json на GitHub → программа никогда не покажет обновление</div>
+                <div class="warning">⚠️ <strong>Главное правило:</strong> код новой версии должен быть <strong>строго больше</strong> кода предыдущей версии. Нельзя из 2.1 сделать 2.2 с кодом 21 — программа не увидит разницы!</div>
+            </div>
+
+            <div class="logic-box">
+                <p style="font-weight: 600; margin-bottom: 15px;">📐 Как определить код для новой версии</p>
+                <table class="guide-table">
+                    <thead><tr><th>Версия для пользователя</th><th>Какой код писать</th><th>Пояснение</th></tr></thead>
+                    <tbody>
+                        <tr><td>2.1 → 2.2</td><td>21 → 22</td><td>Убрали точку, увеличили на 1</td></tr>
+                        <tr><td>2.9 → 2.10</td><td>29 → 210</td><td>Убрали точку, 2.10 = 210</td></tr>
+                        <tr><td>2.10 → 2.11</td><td>210 → 211</td><td>Просто увеличили на 1</td></tr>
+                        <tr><td>2.99 → 3.0</td><td>299 → 30</td><td>Переход на новый диапазон, код сбрасывается</td></tr>
+                    </tbody>
+                </table>
+                <div class="tip">💡 <strong>Простой способ:</strong> уберите точку из версии и получите код. 2.1 → 21, 2.2 → 22, 3.0 → 30. Главное — следите, чтобы код увеличивался.</div>
+            </div>
+
+            <!-- 5.2. ЧТО МЕНЯТЬ В ПРОГРАММЕ -->
+            <h3 id="section5.2">5.2. Что менять в программе (локально)</h3>
+            <div class="file-path">📄 Файл: <code>nextt/utils/update_checker.py</code></div>
+            <p>Откройте этот файл в любом текстовом редакторе (Блокнот, Notepad++, VS Code). Найдите и измените эти строки:</p>
+            <div class="code-block">
+                <div class="code-header"><span>update_checker.py — строки для изменения</span><button class="copy-btn" onclick="copyCode(this)">Копировать</button></div>
+                <pre><code>CURRENT_VERSION = "2.2"        # ← новая версия (например, 2.2) — что увидят пользователи
+CURRENT_VERSION_CODE = 22       # ← код версии (например, 22) — для сравнения компьютером</code></pre>
+            </div>
+            <p><strong>Что здесь происходит:</strong> вы сообщаете программе, что её собственная версия теперь 2.2 (текст) и код 22 (число).</p>
+
+            <!-- 5.3. ЧТО МЕНЯТЬ НА GITHUB -->
+            <h3 id="section5.3">5.3. Что менять на GitHub (в интернете)</h3>
+            <div class="file-path">🌐 Файл на GitHub: <code>https://github.com/e-laggartt/NexTT/blob/main/version.json</code></div>
+            <p>Зайдите на GitHub, откройте этот файл, нажмите «Редактировать» (карандаш). Измените содержимое:</p>
+            <div class="code-block">
+                <div class="code-header"><span>version.json — пример</span><button class="copy-btn" onclick="copyCode(this)">Копировать</button></div>
+                <pre><code>{
+    "version": "2.2",
+    "version_code": 22,
+    "download_url": "https://b24.engpx.ru/~kMmVo",
+    "release_date": "2026-06-01",
+    "whats_new": [
+        "Обновлён прайс-лист",
+        "Добавлены новые котлы",
+        "Исправлены мелкие ошибки"
+    ]
+}</code></pre>
+            </div>
+            <p><strong>Что здесь происходит:</strong> вы размещаете в интернете информацию о том, что последняя версия — 2.2 с кодом 22. Когда пользователи запустят программу, она скачает этот файл, увидит код 22 и сравнит со своим кодом.</p>
+            
+            <div class="warning">⚠️ <strong>Важно:</strong> version_code в этом файле должен совпадать с тем, что вы написали в update_checker.py! И оба должны быть больше предыдущих значений.</div>
+            <div class="note">📌 <strong>Процесс целиком:</strong> вы меняете версию в программе → собираете новый EXE → выкладываете EXE на Битрикс → обновляете version.json на GitHub. Когда пользователь запустит старую версию, она скачает новый version.json, увидит, что код стал больше, и покажет окно «Доступна новая версия 2.2».</div>
+        </div>
+
+        <!-- ==================== 6. СОБРАТЬ EXE ==================== -->
+        <div id="section6">
+            <h2>6. Как собрать EXE-файл (build.py)</h2>
+            <p>Сборка — это превращение папки с кодом в один исполняемый файл <code>.exe</code>. Запускается через <code>build.py</code>.</p>
+
+            <h3>Что нужно сделать перед сборкой:</h3>
+            <ol>
+                <li>Убедиться, что все файлы <code>resources/</code> обновлены.</li>
+                <li>Если выпускаете новую версию — изменить <code>CURRENT_VERSION</code> в update_checker.py.</li>
+                <li>Выбрать тип сборки (обычная или dev).</li>
+            </ol>
+
+            <h3 id="section6.1">6.1. Обычная сборка (для пользователей)</h3>
+            <p>В этой сборке нет консоли, нет отладочных сообщений.</p>
+            <ul>
+                <li>Откройте командную строку в <strong>корне проекта</strong>.</li>
+                <li>Введите команду: <code>python build.py</code></li>
+                <li>Дождитесь окончания (появится надпись «Готово!»).</li>
+                <li>Готовый EXE лежит в папке <code>dist/</code>.</li>
+            </ul>
+            <div class="code-block">
+                <div class="code-header"><span>Команда для обычной сборки</span><button class="copy-btn" onclick="copyCode(this)">Копировать</button></div>
+                <pre><code>python build.py</code></pre>
+            </div>
+
+            <h3 id="section6.2">6.2. Dev-сборка (для тестирования)</h3>
+            <p>В этой сборке видна консоль и все отладочные сообщения. <strong class="warning">Не распространяйте среди пользователей!</strong></p>
+            <ul>
+                <li>Откройте файл <code>build.py</code> в текстовом редакторе.</li>
+                <li>Найдите строку <code>"--windowed"</code> и <strong>удалите её</strong> (или закомментируйте).</li>
+                <li>Измените имя выходного файла: <code>"--name=NexTT_dev"</code> (чтобы не перепутать).</li>
+                <li>Запустите <code>python build.py</code>.</li>
+            </ul>
+            <div class="tip">💡 <strong>Подсказка:</strong> Dev-версия показывает все ошибки в консоли — очень удобно для поиска проблем.</div>
+        </div>
+
+        <!-- ==================== 7. ВКЛЮЧИТЬ ЛОГИРОВАНИЕ ==================== -->
+        <div id="section7">
+            <h2>7. Как включить или выключить логирование</h2>
+            <p><strong>Логирование</strong> — это подробные сообщения о работе программы (что происходит, какие ошибки). Обычным пользователям это не нужно, но разработчику помогает отлаживать.</p>
+            <div class="file-path">📄 Файл: <code>nextt/app.py</code></div>
+            <p>Откройте файл, найдите строку:</p>
+            <div class="code-block">
+                <div class="code-header"><span>app.py — настройка логирования</span><button class="copy-btn" onclick="copyCode(this)">Копировать</button></div>
+                <pre><code>setup_logger(level="WARNING", log_file=None)   # ← меняйте здесь</code></pre>
+            </div>
+            <h3>Какие значения можно ставить:</h3>
+            <table class="guide-table">
+                <thead><tr><th>Значение</th><th>Когда использовать</th></tr></thead>
+                <tbody>
+                    <tr><td><code>"WARNING"</code></td><td>Для обычной сборки (пользователи). Только ошибки.</td> </tr>
+                    <tr><td><code>"ERROR"</code></td><td>Только критические ошибки. Ещё тише.</td></tr>
+                    <tr><td><code>"INFO"</code></td><td>Для разработчика. Подробные сообщения.</td></tr>
+                    <tr><td><code>"DEBUG"</code></td><td>Максимально подробно. Только для отладки.</td></tr>
+                </tbody>
+             </table>
+            <div class="note">📌 <strong>Запомните:</strong> перед финальной сборкой для пользователей ставьте <code>"WARNING"</code>.</div>
+        </div>
+
+        <!-- ==================== 8. ВКЛЮЧИТЬ ЭКСПЕРИМЕНТАЛЬНУЮ КНОПКУ ==================== -->
+        <div id="section8">
+            <h2>8. Как включить экспериментальную кнопку «Вставить из буфера»</h2>
+            <p>Это новая функция, которая пока тестируется. По умолчанию она выключена.</p>
+            <div class="file-path">📄 Файл: <code>nextt/experimental/paste_handler.py</code></div>
+            <p>Откройте файл, найдите в самом начале:</p>
+            <div class="code-block">
+                <div class="code-header"><span>paste_handler.py — флаг функции</span><button class="copy-btn" onclick="copyCode(this)">Копировать</button></div>
+                <pre><code>EXPERIMENTAL_ENABLED = True   # ← True = включена, False = выключена</code></pre>
+            </div>
+            <h3>Когда что ставить:</h3>
+            <ul>
+                <li><code>True</code> — кнопка «Вставить из буфера» появляется в меню. Включите, если хотите протестировать.</li>
+                <li><code>False</code> — кнопка скрыта. Используйте для финальной сборки.</li>
+            </ul>
+            <div class="warning">⚠️ <strong>Важно:</strong> Функция экспериментальная, могут быть ошибки. Не включайте в финальной версии без тестирования.</div>
+        </div>
+
+        <!-- ==================== 9. ЧЕК-ЛИСТ РЕЛИЗА ==================== -->
+        <div id="section9">
+            <h2>9. Чек-лист выпуска новой версии</h2>
+            <p>Перед тем как разослать обновление партнёрам, проверьте всё по списку.</p>
+            <div class="checklist">
+                <ul>
+                    <li>Обновлён <code>Мономатрица.xlsx</code> (если изменились цены)</li>
+                    <li>Обновлён <code>Все_категории.xlsx</code> (если добавилось оборудование)</li>
+                    <li>Изменён <code>CURRENT_VERSION</code> и <code>CURRENT_VERSION_CODE</code> в <code>update_checker.py</code></li>
+                    <li>Обновлён файл <code>version.json</code> на GitHub (версия, дата, список изменений)</li>
+                    <li>Выключена экспериментальная кнопка (<code>EXPERIMENTAL_ENABLED = False</code>)</li>
+                    <li>Уровень логирования установлен в <code>"WARNING"</code></li>
+                    <li>Собран EXE через <code>python build.py</code></li>
+                    <li>Проверено, что EXE запускается и работает</li>
+                    <li>Старая версия видит обновление и показывает диалог</li>
+                    <li>Новый EXE загружен на Битрикс по ссылке из <code>download_url</code></li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- ==================== 10. ПРОБЛЕМЫ И РЕШЕНИЯ ==================== -->
+        <div id="section10">
+            <h2>10. Частые проблемы и решения</h2>
+            
+            <h3>❓ Программа не видит обновление</h3>
+            <p><strong>Причины:</strong> не совпадает version_code в update_checker.py и version.json. Или файл version.json недоступен.</p>
+            <p><strong>Решение:</strong> проверьте, что version_code в обоих файлах одинаковый и больше предыдущего. Откройте ссылку на version.json в браузере — должен открываться JSON.</p>
+
+            <h3>❓ Ошибка SSL при проверке обновлений</h3>
+            <p><strong>Причина:</strong> проблема с сертификатами GitHub.</p>
+            <p><strong>Решение:</strong> в коде <code>update_checker.py</code> уже есть обход этой ошибки. Если проблема повторяется — временно отключите проверку обновлений, установив <code>VERSION_URL = ""</code>.</p>
+
+            <h3>❓ EXE не запускается или сразу закрывается</h3>
+            <p><strong>Решение:</strong> соберите dev-версию (с консолью). Запустите её — ошибка будет видна в консольном окне.</p>
+
+            <h3>❓ Не работает кнопка «Вставить из буфера»</h3>
+            <p><strong>Причина:</strong> экспериментальная функция выключена.</p>
+            <p><strong>Решение:</strong> откройте <code>paste_handler.py</code> и установите <code>EXPERIMENTAL_ENABLED = True</code>, затем пересоберите EXE.</p>
+
+            <div class="tip">💡 <strong>Главный совет:</strong> Если что-то пошло не так — соберите dev-версию с консолью и смотрите, что пишет программа. Это самый быстрый способ найти проблему.</div>
+        </div>
+
+        <footer>
+            NexTT · Подсказки для разработчика · Не требует специальных знаний · Открывайте, когда забыли, что делать
+        </footer>
+    </main>
+</div>
+
+<a href="#" class="back-to-top" id="backToTop">↑</a>
+
+<script>
+    function copyCode(btn) {
+        const block = btn.closest('.code-block');
+        const codeElem = block.querySelector('pre code');
+        const text = codeElem.innerText;
+        navigator.clipboard.writeText(text).then(() => {
+            const old = btn.innerText;
+            btn.innerText = '✓';
+            setTimeout(() => { btn.innerText = old; }, 1500);
+        });
+    }
+
+    const sections = document.querySelectorAll('#section1, #section2, #section3, #section4, #section5, #section6, #section7, #section8, #section9, #section10');
+    const tocLinks = document.querySelectorAll('.toc-item a, .toc-sub a');
+    
+    function highlightToc() {
+        let current = '';
+        const scrollPos = window.scrollY + 150;
+        sections.forEach(section => {
+            const id = section.getAttribute('id');
+            if (!id) return;
+            const offsetTop = section.offsetTop;
+            const offsetBottom = offsetTop + section.offsetHeight;
+            if (scrollPos >= offsetTop && scrollPos < offsetBottom) {
+                current = id;
+            }
+        });
+        tocLinks.forEach(link => {
+            link.closest('.toc-item')?.classList.remove('active');
+            const href = link.getAttribute('href');
+            if (href && href.slice(1) === current) {
+                link.closest('.toc-item')?.classList.add('active');
+            }
+        });
+    }
+
+    window.addEventListener('scroll', highlightToc);
+    window.addEventListener('resize', highlightToc);
+    highlightToc();
+
+    document.getElementById('backToTop')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+</script>
+</body>
+</html>

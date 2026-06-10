@@ -1,0 +1,29 @@
+{
+  "версия": "1.0",
+  "шаблоны": [
+    {
+      "id": "template_001",
+      "name": "PB 22-40-400...",
+      "original_example": "PB 22-40-400",
+      "mask": "PB {type}-{height}-{length}",
+      "connection": "K-боковое",
+      "type_transform": {},
+      "height_transform": "code * 10",
+      "length_transform": "direct",
+      "priority": 95,
+      "created_at": "2026-06-05T09:39:26.667418"
+    },
+    {
+      "id": "template_002",
+      "name": "PN 22-40-400...",
+      "original_example": "PN 22-40-400",
+      "mask": "PN {type}-{height}-{length}",
+      "connection": "VK-правое",
+      "type_transform": {},
+      "height_transform": "code * 10",
+      "length_transform": "direct",
+      "priority": 95,
+      "created_at": "2026-06-05T09:39:26.667998"
+    }
+  ]
+}
