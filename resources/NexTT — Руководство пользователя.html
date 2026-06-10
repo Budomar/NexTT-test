@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NexTT — Руководство пользователя</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+            background: #f0f2f5;
+            color: #1a1a2e;
+            line-height: 1.5;
+        }
+
+        /* Контейнер с двумя колонками */
+        .container {
+            display: flex;
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            min-height: 100vh;
+        }
+
+        /* Боковое меню */
+        .sidebar {
+            width: 280px;
+            background: #1e2a3e;
+            color: #ecf0f1;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            padding: 24px 20px;
+            border-bottom: 1px solid #2c3e50;
+            margin-bottom: 16px;
+        }
+
+        .sidebar-header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+
+        .sidebar-header p {
+            font-size: 12px;
+            color: #7f8c8d;
+            margin-top: 8px;
+        }
+
+        .nav {
+            list-style: none;
+            padding: 0 12px 20px 12px;
+        }
+
+        .nav-item {
+            margin-bottom: 6px;
+        }
+
+        .nav-link {
+            display: block;
+            padding: 10px 16px;
+            color: #bdc3c7;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .nav-link:hover {
+            background: #2c3e50;
+            color: white;
+        }
+
+        .nav-link.active {
+            background: #2c3e50;
+            color: white;
+        }
+
+        .nav-section {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #7f8c8d;
+            padding: 16px 16px 8px 16px;
+            margin-top: 8px;
+        }
+
+        /* Основной контент */
+        .content {
+            flex: 1;
+            padding: 40px 48px;
+            max-width: calc(100% - 280px);
+            overflow-x: auto;
+        }
+
+        /* Типографика */
+        h1 {
+            font-size: 32px;
+            margin-bottom: 16px;
+            font-weight: 600;
+            color: #1e2a3e;
+        }
+
+        h2 {
+            font-size: 24px;
+            margin-top: 32px;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e0e4e8;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        h3 {
+            font-size: 18px;
+            margin-top: 24px;
+            margin-bottom: 12px;
+            font-weight: 600;
+            color: #34495e;
+        }
+
+        p {
+            margin-bottom: 16px;
+            font-size: 15px;
+            color: #2c3e50;
+        }
+
+        ul, ol {
+            margin: 12px 0 20px 24px;
+        }
+
+        li {
+            margin-bottom: 8px;
+            font-size: 15px;
+        }
+
+        /* Таблицы */
+        .table-wrapper {
+            overflow-x: auto;
+            margin: 20px 0;
+            border-radius: 8px;
+            border: 1px solid #e0e4e8;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th {
+            background: #f8f9fa;
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 1px solid #e0e4e8;
+        }
+
+        td {
+            padding: 10px 16px;
+            border-bottom: 1px solid #e0e4e8;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Блоки подсказок */
+        .tip {
+            background: #e8f4fd;
+            border-left: 4px solid #3498db;
+            padding: 16px 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+
+        .tip strong {
+            color: #2980b9;
+        }
+
+        .warning {
+            background: #fef5e7;
+            border-left: 4px solid #f39c12;
+            padding: 16px 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+
+        .code {
+            background: #1e2a3e;
+            color: #ecf0f1;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: 'Consolas', monospace;
+            font-size: 13px;
+        }
+
+        hr {
+            margin: 32px 0;
+            border: none;
+            height: 1px;
+            background: #e0e4e8;
+        }
+
+        /* Изображения */
+        .screenshot {
+            background: #f8f9fa;
+            border: 1px solid #e0e4e8;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            margin: 24px 0;
+            font-size: 13px;
+            color: #7f8c8d;
+        }
+
+        /* Адаптивность */
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: static;
+            }
+            .content {
+                max-width: 100%;
+                padding: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- Боковое меню с закладками -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h1>NexTT</h1>
+            <p>Руководство пользователя</p>
+        </div>
+        
+        <div class="nav-section">Начало работы</div>
+        <ul class="nav">
+            <li class="nav-item"><a href="#intro" class="nav-link">Введение</a></li>
+            <li class="nav-item"><a href="#interface" class="nav-link">Интерфейс программы</a></li>
+            <li class="nav-item"><a href="#first-start" class="nav-link">Первый запуск</a></li>
+        </ul>
+
+        <div class="nav-section">Загрузка данных</div>
+        <ul class="nav">
+            <li class="nav-item"><a href="#load-file" class="nav-link">Загрузка файлов</a></li>
+            <li class="nav-item"><a href="#column-selector" class="nav-link">Выбор столбцов</a></li>
+            <li class="nav-item"><a href="#pdf-pages" class="nav-link">Выбор страниц PDF</a></li>
+        </ul>
+
+        <div class="nav-section">Мастер подбора аналогов</div>
+        <ul class="nav">
+            <li class="nav-item"><a href="#correspondence" class="nav-link">Обзор мастера</a></li>
+            <li class="nav-item"><a href="#manual-select" class="nav-link">Ручной подбор аналога</a></li>
+            <li class="nav-item"><a href="#templates" class="nav-link">Обучение программы</a></li>
+            <li class="nav-item"><a href="#navigation" class="nav-link">Навигация в таблице</a></li>
+        </ul>
+
+        <div class="nav-section">Матрица и спецификация</div>
+        <ul class="nav">
+            <li class="nav-item"><a href="#matrix" class="nav-link">Работа с матрицей</a></li>
+            <li class="nav-item"><a href="#preview" class="nav-link">Предпросмотр спецификации</a></li>
+            <li class="nav-item"><a href="#export" class="nav-link">Экспорт в Excel</a></li>
+            <li class="nav-item"><a href="#brackets" class="nav-link">Кронштейны и скидки</a></li>
+        </ul>
+
+        <div class="nav-section">Дополнительно</div>
+        <ul class="nav">
+            <li class="nav-item"><a href="#reset" class="nav-link">Сброс данных</a></li>
+            <li class="nav-item"><a href="#troubleshooting" class="nav-link">Решение проблем</a></li>
+            <li class="nav-item"><a href="#shortcuts" class="nav-link">Горячие клавиши</a></li>
+        </ul>
+    </div>
+
+    <!-- Основной контент -->
+    <div class="content">
+        <!-- ==================== ВВЕДЕНИЕ ==================== -->
+        <h1 id="intro">Введение</h1>
+        <p><strong>NexTT</strong> — это программа для автоматического подбора аналогов радиаторов LaggarTT из спецификаций конкурентов. Она поддерживает форматы Excel, PDF и Word, автоматически распознаёт названия радиаторов и помогает сформировать итоговую спецификацию.</p>
+        
+        <div class="tip">
+            <strong>💡 Ключевая особенность:</strong> Программа обучается на ваших ручных подборах. Достаточно один раз указать аналог для нераспознанного радиатора — и в следующий раз все похожие названия будут подобраны автоматически.
+        </div>
+
+        <!-- ==================== ИНТЕРФЕЙС ==================== -->
+        <h2 id="interface">Интерфейс программы</h2>
+        <p>Главное окно состоит из нескольких функциональных зон:</p>
+
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr><th>Элемент</th><th>Назначение</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><strong>Создать спецификацию</strong></td><td>Формирует и открывает Excel-файл с подобранными позициями</td></tr>
+                    <tr><td><strong>Загрузить данные</strong></td><td>Загружает файл спецификации (Excel, PDF, Word)</td></tr>
+                    <tr><td><strong>Информация</strong></td><td>Лицензия, инструкция, прайс-лист, ссылки на каталоги</td></tr>
+                    <tr><td><strong>Вид подключения</strong></td><td>Выбор типа подключения: VK-правое/левое или K-боковое</td></tr>
+                    <tr><td><strong>Тип радиатора</strong></td><td>Выбор типа (10, 11, 20, 21, 22, 30, 33)</td></tr>
+                    <tr><td><strong>Масштаб</strong></td><td>Увеличение/уменьшение размера шрифта в интерфейсе</td></tr>
+                    <tr><td><strong>Матрица радиаторов</strong></td><td>Таблица для ввода количества радиаторов (высота × длина)</td></tr>
+                    <tr><td><strong>Предпросмотр</strong></td><td>Просмотр итоговой спецификации перед экспортом</td></tr>
+                    <tr><td><strong>Аналоги</strong></td><td>Открывает мастер подбора аналогов</td></tr>
+                    <tr><td><strong>Сброс</strong></td><td>Очищает все данные и сбрасывает настройки</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- ==================== ПЕРВЫЙ ЗАПУСК ==================== -->
+        <h2 id="first-start">Первый запуск</h2>
+        <ol>
+            <li>Убедитесь, что в папке с программой присутствует файл <span class="code">Мономатрица.xlsx</span> (база радиаторов LaggarTT)</li>
+            <li>Запустите файл <span class="code">NexTT.exe</span></li>
+            <li>Дождитесь загрузки данных (в статусной строке появится сообщение о готовности)</li>
+            <li>Нажмите <strong>«Загрузить данные»</strong> и выберите спецификацию для обработки</li>
+        </ol>
+
+        <!-- ==================== ЗАГРУЗКА ФАЙЛОВ ==================== -->
+        <h2 id="load-file">Загрузка файлов</h2>
+        <p>Программа поддерживает следующие форматы:</p>
+        <ul>
+            <li><strong>Excel</strong> — .xlsx, .xls, .xlsm</li>
+            <li><strong>CSV/TSV</strong> — .csv, .tsv, .txt</li>
+            <li><strong>PDF</strong> — .pdf (требуется наличие текстового слоя)</li>
+            <li><strong>Word</strong> — .docx</li>
+        </ul>
+
+        <div class="warning">
+            <strong>⚠️ Внимание для PDF:</strong> Файлы, созданные из изображений (скан-копии), не содержат текстового слоя и не могут быть обработаны. Используйте PDF, экспортированные из Excel или Word.
+        </div>
+
+        <h3 id="column-selector">Выбор столбцов (ColumnSelector)</h3>
+        <p>После загрузки файла откроется окно выбора столбцов:</p>
+        <ol>
+            <li>Нажмите на заголовок столбца, содержащего <strong>названия радиаторов</strong> — столбец станет «Наименование»</li>
+            <li>Нажмите на заголовок столбца, содержащего <strong>количество</strong> — столбец станет «Количество»</li>
+            <li>Цвет фона таблицы подсказывает состояние: 🔴 красный — ничего не выбрано, 🟡 жёлтый — выбран только Наименование, 🟢 зелёный — выбрана полная пара</li>
+            <li>Можно выбрать несколько пар столбцов (если в файле несколько таблиц)</li>
+            <li>Нажмите <strong>«Продолжить»</strong></li>
+        </ol>
+
+        <h3 id="pdf-pages">Выбор страниц PDF</h3>
+        <p>Если PDF содержит более 5 страниц, откроется диалог выбора страниц:</p>
+        <ul>
+            <li>Клик по миниатюре — выбор/отмена выбора страницы</li>
+            <li>Можно ввести диапазон вручную (например: 1-5, 10, 15-20)</li>
+            <li>Кнопки «Выбрать все» и «Очистить все»</li>
+            <li>Выбирайте только страницы с таблицами (чертежи и приложения пропускайте)</li>
+        </ul>
+
+        <!-- ==================== МАСТЕР ПОДБОРА АНАЛОГОВ ==================== -->
+        <h2 id="correspondence">Мастер подбора аналогов</h2>
+        <p>После обработки файла откроется окно «Мастер подбора аналогов». Здесь отображаются все распознанные строки спецификации.</p>
+
+        <div class="tip">
+            <strong>🎨 Цветовая индикация:</strong> Строки сгруппированы по типу радиатора. Одинаковый цвет фона — одинаковые модели конкурента.
+        </div>
+
+        <div class="table-wrapper">
+            <table>
+                <thead><tr><th>Метод подбора</th><th>Значение</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>Автоматически</strong></td><td>Программа распознала название встроенным парсером</td></tr>
+                    <tr><td><strong>По образцу (шаблон)</strong></td><td>Применён сохранённый ранее шаблон</td></tr>
+                    <tr><td><strong>Ручной ввод</strong></td><td>Аналог выбран пользователем вручную</td></tr>
+                    <tr><td><strong>Не подобрано</strong></td><td>Требуется ручной выбор аналога</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 id="manual-select">Ручной подбор аналога</h3>
+        <ol>
+            <li>Выделите строку с статусом «Не подобрано» (или любую другую для замены)</li>
+            <li>Нажмите кнопку <strong>«Выбрать аналог LaggarTT»</strong></li>
+            <li>В открывшемся окне укажите параметры:
+                <ul>
+                    <li>Вид подключения (VK-правое, VK-левое, K-боковое)</li>
+                    <li>Тип радиатора (10, 11, 20, 21, 22, 30, 33)</li>
+                    <li>Высоту и длину (в таблице-матрице)</li>
+                </ul>
+            </li>
+            <li>Нажмите <strong>«ВЫБРАТЬ»</strong></li>
+        </ol>
+
+        <div class="tip">
+            <strong>🤖 Обучение программы:</strong> После ручного подбора программа анализирует структуру названия и создаёт <strong>шаблон</strong>. При следующей загрузке все названия с такой же структурой будут подобраны автоматически.
+        </div>
+
+        <h3 id="navigation">Навигация в таблице</h3>
+        <div class="table-wrapper">
+            <table>
+                <thead><tr><th>Действие</th><th>Результат</th></tr></thead>
+                <tbody>
+                    <tr><td>↑ / ↓</td><td>Перемещение по строкам</td></tr>
+                    <tr><td>Shift + ↑ / ↓</td><td>Выделение диапазона строк</td></tr>
+                    <tr><td>Ctrl + A</td><td>Выделить все строки</td></tr>
+                    <tr><td>Delete</td><td>Удалить выделенные строки</td></tr>
+                    <tr><td>Правый клик мыши</td><td>Контекстное меню</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- ==================== МАТРИЦА И СПЕЦИФИКАЦИЯ ==================== -->
+        <h2 id="matrix">Работа с матрицей</h2>
+        <p>Матрица — это таблица, где строки соответствуют высоте радиатора (300, 400, 500, 600, 900 мм), а столбцы — длине (от 400 до 3000 мм с шагом 100).</p>
+        <ul>
+            <li>В ячейки матрицы вводится количество радиаторов</li>
+            <li>Поддерживается формат <span class="code">1+2</span> — означает 3 штуки (суммируется)</li>
+            <li>При наведении на ячейку появляется подсказка с ценой и параметрами</li>
+            <li>Стрелками на клавиатуре можно перемещаться между ячейками</li>
+        </ul>
+
+        <h3 id="brackets">Кронштейны и скидки</h3>
+        <ul>
+            <li><strong>Тип кронштейнов:</strong> Настенные / Напольные / Без</li>
+            <li><strong>Скидка на радиаторы, %</strong> — применяется ко всем радиаторам в спецификации</li>
+            <li><strong>Скидка на кронштейны, %</strong> — применяется только к кронштейнам</li>
+        </ul>
+
+        <h3 id="preview">Предпросмотр спецификации</h3>
+        <p>После заполнения матрицы нажмите <strong>«Предпросмотр»</strong>. Откроется окно с итоговой таблицей:</p>
+        <ul>
+            <li>Все цены пересчитываются с учётом скидок</li>
+            <li>Можно добавить дополнительные кронштейны (из выпадающего списка)</li>
+            <li>Двойной клик по количеству кронштейнов — редактирование</li>
+            <li>Delete или правый клик → удаление строки с кронштейном</li>
+            <li>Клик по заголовку «Артикул» — копирование всех артикулов в буфер обмена</li>
+            <li>Клик по заголовку «Кол-во» — копирование всех количеств</li>
+        </ul>
+
+        <h3 id="export">Экспорт в Excel</h3>
+        <p>Из окна предпросмотра нажмите <strong>«Экспорт в Excel»</strong>. Программа создаст файл с двумя листами:</p>
+        <ul>
+            <li><strong>Спецификация</strong> — таблица с артикулами, наименованиями, ценами и количествами</li>
+            <li><strong>Таблица соответствия</strong> — оригинальные названия и подобранные аналоги (если есть данные)</li>
+        </ul>
+        <p>Файл автоматически откроется в Excel.</p>
+
+        <!-- ==================== ДОПОЛНИТЕЛЬНО ==================== -->
+        <h2 id="reset">Сброс данных</h2>
+        <p>Кнопка <strong>«Сброс»</strong> выполняет следующие действия:</p>
+        <ul>
+            <li>Очищает матрицу (все введённые количества)</li>
+            <li>Сбрасывает скидки на 0%</li>
+            <li>Очищает данные таблицы соответствия</li>
+            <li>Закрывает все вспомогательные окна</li>
+        </ul>
+        <div class="tip"><strong>💡 Рекомендация:</strong> Используйте «Сброс» перед загрузкой новой спецификации, чтобы избежать смешивания данных.</div>
+
+        <h2 id="troubleshooting">Решение проблем</h2>
+
+        <div class="warning">
+            <strong>❌ Нераспознанные названия</strong><br>
+            Откройте «Аналоги», найдите строку, нажмите «Выбрать аналог LaggarTT» и подберите вручную. Программа запомнит формат.
+        </div>
+
+        <div class="warning">
+            <strong>❌ PDF не читается</strong><br>
+            Убедитесь, что PDF содержит текстовый слой (не является сканом). Попробуйте конвертировать PDF в Excel или скопировать данные через буфер обмена.
+        </div>
+
+        <div class="warning">
+            <strong>❌ В Excel появился лишний лист «Таблица соответствия» со старыми данными</strong><br>
+            Нажмите «Сброс» перед новой загрузкой. Это очистит сохранённые данные таблицы соответствия.
+        </div>
+
+        <div class="tip">
+            <strong>✅ Программа не запускается или вылетает</strong><br>
+            Убедитесь, что в папке с программой есть файл <span class="code">Мономатрица.xlsx</span>. При необходимости скачайте актуальную версию.
+        </div>
+
+        <h2 id="shortcuts">Горячие клавиши</h2>
+        <div class="table-wrapper">
+            <table>
+                <thead><tr><th>Комбинация</th><th>Где работает</th><th>Действие</th></tr></thead>
+                <tbody>
+                    <tr><td>↑ / ↓</td><td>Мастер подбора аналогов</td><td>Навигация по строкам</td></tr>
+                    <tr><td>Shift + ↑ / ↓</td><td>Мастер подбора аналогов</td><td>Выделение диапазона строк</td></tr>
+                    <tr><td>Ctrl + A</td><td>Мастер подбора аналогов</td><td>Выделить все строки</td></tr>
+                    <tr><td>Delete</td><td>Мастер подбора аналогов</td><td>Удалить выделенные строки</td></tr>
+                    <tr><td>Enter</td><td>Матрица</td><td>Подтвердить ввод в ячейке</td></tr>
+                    <tr><td>↑ / ↓ / ← / →</td><td>Матрица</td><td>Навигация между ячейками</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <hr>
+
+        <p style="text-align: center; color: #7f8c8d; font-size: 13px; margin-top: 40px;">
+            NexTT — инструмент для подбора аналогов радиаторов LaggarTT<br>
+            © ООО «Термотехника Энгельс»
+        </p>
+    </div>
+</div>
+
+<script>
+    // Подсветка активного пункта меню при прокрутке
+    document.addEventListener('DOMContentLoaded', function() {
+        const sections = document.querySelectorAll('h1, h2, h3');
+        const navLinks = document.querySelectorAll('.nav-link');
+        
+        function updateActiveNav() {
+            let current = '';
+            const scrollPosition = window.scrollY + 150;
+            
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                const sectionBottom = sectionTop + section.offsetHeight;
+                if (scrollPosition >= sectionTop && scrollPosition < sectionBottom) {
+                    current = section.getAttribute('id');
+                }
+            });
+            
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                const href = link.getAttribute('href');
+                if (href && href.substring(1) === current) {
+                    link.classList.add('active');
+                }
+            });
+        }
+        
+        window.addEventListener('scroll', updateActiveNav);
+        updateActiveNav();
+    });
+</script>
+</body>
+</html>

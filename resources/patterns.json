@@ -1,0 +1,232 @@
+[
+  {
+    "pattern": "\\(meteor.*?thermo\\).*?(?P<type>\\d{1,2})[\\s\\-/xх]*(?P<height>\\d{2,4})[\\s\\-/xх]*(?P<length>\\d{3,4})",
+    "connection": "VK-правое",
+    "rad_type": "22",
+    "height": 600,
+    "length": 2200,
+    "source": "learned",
+    "original_example": "Радиатор нижнее правое (METEOR THERMO) 22-600-2200",
+    "created_at": "2026-05-07T17:24:52.834476"
+  },
+  {
+    "pattern": "\\(meteor.*?thermo\\)22\\-300\\-2400.*?(?P<type>\\d{1,2})[\\s\\-/xх]*(?P<height>\\d{2,4})[\\s\\-/xх]*(?P<length>\\d{3,4})",
+    "connection": "VK-правое",
+    "rad_type": "22",
+    "height": 300,
+    "length": 2400,
+    "source": "learned",
+    "original_example": "Радиатор нижнее правое (METEOR THERMO)22-300-2400",
+    "created_at": "2026-05-07T17:24:14.762224"
+  },
+  {
+    "pattern": "vc33\\-200\\-600.*?(?P<type>\\d{1,2})[\\s\\-/xх]*(?P<height>\\d{2,4})[\\s\\-/xх]*(?P<length>\\d{3,4})",
+    "connection": "K-боковое",
+    "rad_type": "33",
+    "height": 300,
+    "length": 600,
+    "source": "learned",
+    "original_example": "VC33-200-600 R",
+    "created_at": "2026-05-07T17:21:21.982355"
+  },
+  {
+    "pattern": "компактный.*?профильный.*?(?P<type>\\d{1,2})[\\s\\-/xх]*(?P<height>\\d{2,4})[\\s\\-/xх]*(?P<length>\\d{3,4})",
+    "connection": "K-боковое",
+    "rad_type": "11",
+    "height": 500,
+    "length": 500,
+    "source": "learned",
+    "original_example": "Радиатор компактный стальной профильный KERMI Profil-K FK0 11 500/500 с  монтажным комплектом,  боко",
+    "created_at": "2026-05-07T17:21:21.982372"
+  },
+  {
+    "pattern": "kermi.*?боковым.*?(?P<type>\\d{1,2})[\\s\\-/xх]*(?P<height>\\d{2,4})[\\s\\-/xх]*(?P<length>\\d{3,4})",
+    "connection": "K-боковое",
+    "rad_type": "10",
+    "height": 400,
+    "length": 1000,
+    "source": "learned",
+    "original_example": "Стальной панельный радиатор Kermi с боковым подключением тип 10, высота 400, с комплектом крепления; длина 1000, 10-400-1000 Kermi",
+    "created_at": "2026-05-07T17:21:21.982378"
+  },
+  {
+    "pattern": "радиатор\\s+стальной\\s+профильный\\s+kermi\\s+profil[\\-\\s]*\\s+fto\\s+(?P<type>\\d{1,2})\\s+(?P<height>\\d{2,4})/(?P<length>\\d{3,4})\\s+с\\s+монтажным\\s+комплектом,",
+    "connection": "K-боковое",
+    "rad_type": "11",
+    "height": 500,
+    "length": 1200,
+    "source": "learned",
+    "original_example": "Радиатор стальной профильный KERMI Profil- FTO 11 500/1200  с  монтажным комплектом,",
+    "created_at": "2026-05-07T17:21:21.982381"
+  },
+  {
+    "pattern": "радиатор\\s+компактный\\s+стальной\\s+профильный\\s+kermi\\s+profil[\\-\\s]*k\\s+fk0\\s+(?P<type>\\d{1,2})\\s+(?P<height>\\d{2,4})/(?P<length>\\d{3,4})\\s+с\\s+монтажным\\s+комплектом,\\s+бок",
+    "connection": "K-боковое",
+    "rad_type": "22",
+    "height": 500,
+    "length": 1000,
+    "source": "learned",
+    "original_example": "Радиатор компактный стальной профильный KERMI Profil-K FK0 22 500/1000 с  монтажным комплектом,  бок",
+    "created_at": "2026-05-07T17:21:21.982384"
+  },
+  {
+    "pattern": "радиатор\\s+компактный\\s+стальной\\s+профильный\\s+kermi\\s+profil[\\-\\s]*k\\s+fk0\\s+(?P<type>\\d{1,2})\\s+(?P<height>\\d{2,4})/(?P<length>\\d{3,4})\\s+с\\s+монтажным\\s+комплектом,\\s+боко",
+    "connection": "K-боковое",
+    "rad_type": "11",
+    "height": 500,
+    "length": 500,
+    "source": "learned",
+    "original_example": "Радиатор компактный стальной профильный KERMI Profil-K FK0 11 500/500 с  монтажным комплектом,  боко",
+    "created_at": "2026-05-07T17:21:21.982387"
+  },
+  {
+    "pattern": "радиатор\\s+стальной\\s+панельный\\s+meteor\\s+classic\\s+(?P<type>\\d{1,2})/(?P<height>\\d{2,4})/(?P<length>\\d{3,4})\\s+нижнее\\s+правое\\s+подключение",
+    "connection": "VK-правое",
+    "rad_type": "11",
+    "height": 300,
+    "length": 800,
+    "source": "learned",
+    "original_example": "Радиатор стальной панельный METEOR Classic 11/300/800 нижнее правое подключение",
+    "created_at": "2026-05-07T17:21:21.982390"
+  },
+  {
+    "pattern": "радиатор\\s+стальной\\s+панельный\\s+meteor\\s+classic\\s+(?P<type>\\d{1,2})/(?P<height>\\d{2,4})/(?P<length>\\d{3,4})\\s+нижнее\\s+правое\\s+подключение",
+    "connection": "K-боковое",
+    "rad_type": "11",
+    "height": 300,
+    "length": 800,
+    "source": "learned",
+    "original_example": "Радиатор стальной панельный METEOR Classic 11/300/800 нижнее правое подключение",
+    "created_at": "2026-05-07T17:21:21.982393"
+  },
+  {
+    "pattern": "(?P<type>\\d{1,2})[\\-\\s]*(?P<height>\\d{2,4})[\\-\\s]*(?P<length>\\d{3,4})",
+    "connection": "K-боковое",
+    "rad_type": "33",
+    "height": 500,
+    "length": 1200,
+    "source": "learned",
+    "original_example": "33-500-1200",
+    "created_at": "2026-05-07T17:21:21.982396"
+  },
+  {
+    "pattern": "радиатор\\s+панельный\\s+стальной,\\s+в\\s+комплекте\\s+заглушкой,\\s+настенными\\s+кронштейнами\\s+classic\\s+(?P<type>\\d{1,2})[\\-\\s]*(?P<height>\\d{2,4})[\\-\\s]*(?P<length>\\d{3,4})\\s+prado",
+    "connection": "K-боковое",
+    "rad_type": "11",
+    "height": 500,
+    "length": 700,
+    "source": "learned",
+    "original_example": "Радиатор панельный стальной, в комплекте заглушкой, настенными кронштейнами Classic 11-500-700 Prado",
+    "created_at": "2026-05-07T17:21:21.982399"
+  },
+  {
+    "pattern": "радиатор\\s+панельный\\s+стальной,\\s+в\\s+комплекте\\s+с\\s+заглушкой,\\s+настенными\\s+кронштейнами\\s+classic\\s+(?P<type>\\d{1,2})[\\-\\s]*(?P<height>\\d{2,4})[\\-\\s]*(?P<length>\\d{3,4})\\s+prado",
+    "connection": "K-боковое",
+    "rad_type": "11",
+    "height": 500,
+    "length": 500,
+    "source": "learned",
+    "original_example": "Радиатор панельный стальной, в комплекте с заглушкой, настенными кронштейнами Classic 11-500-500 Prado",
+    "created_at": "2026-05-07T17:21:21.982401"
+  },
+  {
+    "pattern": "evra\\s+h20[\\-\\s]*(?P<height>\\d{2,4})[\\-\\s]*(?P<length>\\d{3,4})",
+    "connection": "K-боковое",
+    "rad_type": "10",
+    "height": 500,
+    "length": 600,
+    "source": "learned",
+    "original_example": "EVRA H20-500-600",
+    "created_at": "2026-05-07T17:21:21.982404"
+  },
+  {
+    "pattern": "evra\\s+h(?P<type>\\d{1,2})[\\-\\s]*50[\\-\\s]*(?P<length>\\d{3,4})",
+    "connection": "K-боковое",
+    "rad_type": "10",
+    "height": 500,
+    "length": 1000,
+    "source": "learned",
+    "original_example": "EVRA H10-50-1000",
+    "created_at": "2026-05-07T17:21:21.982407"
+  },
+  {
+    "pattern": "evra\\s+h(?P<type>\\d{1,2})[\\-\\s]*30[\\-\\s]*(?P<length>\\d{3,4})",
+    "connection": "K-боковое",
+    "rad_type": "10",
+    "height": 300,
+    "length": 400,
+    "source": "learned",
+    "original_example": "EVRA H10-30-400",
+    "created_at": "2026-05-07T17:21:21.982410"
+  },
+  {
+    "pattern": "evra\\s+c(?P<type>\\d{1,2})[\\-\\s]*(?P<height>\\d{2,4})[\\-\\s]*(?P<length>\\d{3,4})",
+    "connection": "K-боковое",
+    "rad_type": "22",
+    "height": 300,
+    "length": 500,
+    "source": "learned",
+    "original_example": "EVRA C22-300-500",
+    "created_at": "2026-05-07T17:21:21.982413"
+  },
+  {
+    "pattern": "evra\\s+c(?P<type>\\d{1,2})s[\\-\\s]*(?P<height>\\d{2,4})[\\-\\s]*(?P<length>\\d{3,4})",
+    "connection": "K-боковое",
+    "rad_type": "21",
+    "height": 300,
+    "length": 500,
+    "source": "learned",
+    "original_example": "EVRA C21S-300-500",
+    "created_at": "2026-05-07T17:21:21.982415"
+  },
+  {
+    "pattern": "радиатор\\s+стальной\\s+панельный\\s+с\\s+боковым\\s+подключением\\s+(?P<type>\\d{1,2})/(?P<height>\\d{2,4})/100\\s+справа",
+    "connection": "K-боковое",
+    "rad_type": "22",
+    "height": 300,
+    "length": 1000,
+    "source": "learned",
+    "original_example": "Радиатор стальной панельный с боковым подключением 22/300/100 справа",
+    "created_at": "2026-05-07T17:21:21.982418"
+  },
+  {
+    "pattern": "радиатор\\s+стальной\\s+профильный\\s+kermi\\s+profil[\\-\\s]*k\\s+fko\\s+(?P<type>\\d{1,2})\\s+(?P<height>\\d{2,4})/(?P<length>\\d{3,4})\\s+с\\s+монтажным\\s+комплектом,",
+    "connection": "K-боковое",
+    "rad_type": "22",
+    "height": 500,
+    "length": 1000,
+    "source": "learned",
+    "original_example": "Радиатор стальной профильный KERMI Profil-K FKO 22 500/1000 с  монтажным комплектом,",
+    "created_at": "2026-05-07T17:21:21.982421"
+  },
+  {
+    "pattern": "радиатор\\s+панельный\\s+c(?P<type>\\d{1,2})[\\-\\s]*(?P<height>\\d{2,4})[\\-\\s]*(?P<length>\\d{3,4})\\s+ral9016\\s+royal\\s+thermo\\s+compact\\s+55\\s+шт\\s+2\\s+143\\s+404,80",
+    "connection": "K-боковое",
+    "rad_type": "21",
+    "height": 300,
+    "length": 700,
+    "source": "learned",
+    "original_example": "Радиатор панельный C21-300-700 RAL9016 Royal Thermo COMPACT 55 шт 2  143 404,80",
+    "created_at": "2026-05-07T17:21:21.982423"
+  },
+  {
+    "pattern": "радиатор\\s+панельный\\s+royal\\s+thermo\\s+compact\\s+c(?P<type>\\d{1,2})[\\-\\s]*(?P<height>\\d{2,4})[\\-\\s]*(?P<length>\\d{3,4})\\s+ral9016",
+    "connection": "K-боковое",
+    "rad_type": "21",
+    "height": 300,
+    "length": 700,
+    "source": "learned",
+    "original_example": "Радиатор панельный Royal Thermo COMPACT C21-300-700 RAL9016",
+    "created_at": "2026-05-07T17:21:21.982426"
+  },
+  {
+    "pattern": "радиатор\\s+стальной\\s+панельный\\s+с\\s+нижним\\s+подключением,\\s+тип\\s+(?P<type>\\d{1,2}),\\s+габариты\\s+62[xх\\s]*(?P<height>\\d{2,4})[xх\\s]*(?P<length>\\d{3,4})\\s+мм\\s+\\(ш[xх\\s]*в[xх\\s]*д\\)\\s+cv\\s+11\\s+300\\s+[xх\\s]*\\s+1000",
+    "connection": "VK-правое",
+    "rad_type": "11",
+    "height": 300,
+    "length": 1000,
+    "source": "learned",
+    "original_example": "Радиатор стальной панельный с нижним подключением, тип 11, габариты 62х300х1000 мм (ШхВхД)  CV 11 300 x 1000",
+    "created_at": "2026-05-07T17:21:21.982429"
+  }
+]
