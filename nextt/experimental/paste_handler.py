@@ -340,6 +340,7 @@ def _run_analog_matcher(main_window, df) -> None:
     """Запускает стандартный подбор аналогов для чужих радиаторов."""
     try:
         from nextt.parsing.column_selector import ColumnSelector
+        from nextt.patterns.template_manager import TemplateManager
         
         # ========== ВАЖНО: освобождаем захват, если он есть ==========
         # Проверяем, есть ли активный grab и освобождаем его
@@ -372,6 +373,9 @@ def _run_analog_matcher(main_window, df) -> None:
         data_for_table = []
         normalizer = main_window.app.normalizer
         
+        # Создаём экземпляр TemplateManager для поиска по шаблонам
+        template_manager = TemplateManager()
+        
         for name_col, qty_col in pairs:
             for _, row in df.iterrows():
                 if name_col >= len(row) or qty_col >= len(row):
@@ -403,8 +407,9 @@ def _run_analog_matcher(main_window, df) -> None:
                         meteor_name = name
                         source = "Автоматически"
                 
+                # ИСПРАВЛЕНИЕ: используем TemplateManager вместо pattern_manager
                 if not meteor_art:
-                    match = main_window.app.pattern_manager.find_match(original_name)
+                    match = template_manager.apply_templates(original_name)
                     if match:
                         art, name = main_window.app.data_provider.find_analog(
                             match['connection'], match['rad_type'],

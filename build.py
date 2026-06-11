@@ -66,7 +66,7 @@ args = [
     main_script,
     "--name=NexTT-2.2",                    # ← ИМЯ ВЫХОДНОГО EXE (можно менять)
     "--onefile",                           # один EXE файл
-    "--windowed",                          # без консольного окна (убрать для dev)
+    # "--windowed",                          # без консольного окна (убрать для dev)
     "--icon=" + os.path.join(resources_dir, "icon.ico"),  # иконка
     "--clean",                             # очистить временные файлы
     "--noconfirm",                         # не спрашивать подтверждение
