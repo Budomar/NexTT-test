@@ -618,7 +618,9 @@ def _process_equipment_data(main_window, df, searcher, original_text="") -> None
                         'original_text': text,
                         'price': found['price'],
                         'category': found['category'],
-                        'source': 'артикул'
+                        'source': 'артикул',
+                        'confidence': 1.0,
+                        'confidence_note': ''
                     })
                     logger.info(f"  ✅ Найден артикул: {found['article']}")
                     continue
@@ -631,17 +633,52 @@ def _process_equipment_data(main_window, df, searcher, original_text="") -> None
             normalized = searcher.match_line(text, qty)
             
             if normalized['success']:
+                # Получаем артикул и проверяем совпадение с исходным текстом
+                found_article = normalized['article']
+                original_upper = text.strip().upper()
+                found_upper = found_article.strip().upper()
+                
+                # Определяем, есть ли сомнения
+                confidence = normalized.get('confidence', 0.0)
+                source = normalized.get('source', 'нормализатор')
+                confidence_note = ""
+                is_perfect_match = False
+                
+                # Проверяем, является ли исходный текст точным артикулом
+                if _is_article(text):
+                    # Если исходный текст был распознан как артикул, но не найден в базе,
+                    # и нормализатор подобрал другой артикул — это сомнительно
+                    confidence_note = f"Артикул '{text}' не найден, подобран '{found_article}'"
+                elif original_upper == found_upper:
+                    # Точное совпадение
+                    is_perfect_match = True
+                    confidence_note = ""
+                elif original_upper in found_upper or found_upper in original_upper:
+                    # Совпадение по вхождению
+                    confidence_note = f"Совпадение по вхождению: '{text}' ↔ '{found_article}'"
+                elif confidence < 0.95:
+                    confidence_note = f"Низкая уверенность: {confidence:.0%}"
+                else:
+                    confidence_note = f"Подобран: '{text}' → '{found_article}'"
+                
+                # Если уверенность 1.0 и это точное совпадение — считаем идеальным
+                if confidence >= 1.0 and is_perfect_match:
+                    source = 'артикул'
+                    confidence_note = ''
+                
                 matches.append({
                     'success': True,
-                    'article': normalized['article'],
+                    'article': found_article,
                     'name': normalized['name'],
                     'quantity': normalized['quantity'],
                     'original_text': text,
                     'price': 0,
                     'category': '',
-                    'source': normalized.get('source', 'нормализатор')
+                    'source': source,
+                    'confidence': confidence,
+                    'confidence_note': confidence_note
                 })
-                logger.info(f"  ✅ Найдено через нормализатор: {normalized['article']}")
+                logger.info(f"  ✅ Найдено через нормализатор: {found_article} (conf={confidence:.2f})")
             else:
                 matches.append({
                     'success': False,
@@ -652,7 +689,9 @@ def _process_equipment_data(main_window, df, searcher, original_text="") -> None
                     'price': 0,
                     'category': '',
                     'error': normalized.get('error', 'Не найдено'),
-                    'source': 'не найдено'
+                    'source': 'не найдено',
+                    'confidence': 0.0,
+                    'confidence_note': 'Не найдено в базе'
                 })
                 logger.warning(f"  ❌ Не найдено: '{text[:80]}'")
         

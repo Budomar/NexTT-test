@@ -189,8 +189,6 @@ class EquipmentDialog:
         screen_width = self._dialog.winfo_screenwidth()
         screen_height = self._dialog.winfo_screenheight()
         
-        # Немного уменьшаем высоту, чтобы кнопка не уходила под панель задач
-        # (обычно панель задач занимает около 40-50 пикселей)
         taskbar_height = 80
         window_height = screen_height - taskbar_height
         
@@ -226,10 +224,9 @@ class EquipmentDialog:
         main_frame = ttk.Frame(self._dialog, padding="10", style="EqDlg.TFrame")
         main_frame.pack(fill="both", expand=True)
         
-        # Настраиваем grid для main_frame (3 строки: PanedWindow, отступ, кнопка)
-        main_frame.grid_rowconfigure(0, weight=1)  # PanedWindow - растягивается
-        main_frame.grid_rowconfigure(1, weight=0)  # отступ - не растягивается
-        main_frame.grid_rowconfigure(2, weight=0)  # кнопка - не растягивается
+        main_frame.grid_rowconfigure(0, weight=1)
+        main_frame.grid_rowconfigure(1, weight=0)
+        main_frame.grid_rowconfigure(2, weight=0)
         main_frame.grid_columnconfigure(0, weight=1)
 
         # ========== PANED WINDOW (РАЗДЕЛИТЕЛЬ) ==========
@@ -245,7 +242,6 @@ class EquipmentDialog:
         # ========== ВЕРХНЯЯ ПАНЕЛЬ: ТАБЛИЦА РЕЗУЛЬТАТОВ ==========
         table_frame = ttk.Frame(self._paned_window, style="EqDlg.TFrame")
         
-        # Создаём таблицу
         columns = ("Артикул", "Наименование", "Количество")
         self._tree = ttk.Treeview(
             table_frame, 
@@ -264,24 +260,67 @@ class EquipmentDialog:
         self._tree.column("Наименование", width=500, anchor="w")
         self._tree.column("Количество", width=100, anchor="center")
 
+        # ========== НАСТРАИВАЕМ ТЕГИ ДЛЯ ЦВЕТОВ ==========
         self._tree.tag_configure("found", background="#e8f5e9")
         self._tree.tag_configure("not_found", background="#ffebee")
+        self._tree.tag_configure("doubtful", background="#fff3e0")
+        # ===================================================
 
-        # Заполняем таблицу данными
-        for match in self.matches:
+        # ========== ЗАПОЛНЯЕМ ТАБЛИЦУ И СОХРАНЯЕМ СОМНИТЕЛЬНЫЕ ИНДЕКСЫ ==========
+        self._doubtful_indices = []
+
+        for i, match in enumerate(self.matches):
             article = match.get('article', '')
             name = match.get('name', '')
             quantity = match.get('quantity', 0)
             success = match.get('success', False)
+            source = match.get('source', '')
+            confidence = match.get('confidence', 0.0)
+            confidence_note = match.get('confidence_note', '')
+            original_text = match.get('original_text', '')
 
+            is_doubtful = False
+            tag = "not_found"
+            display_name = name
+            
             if success and name:
                 display_name = name
+                
+                if source == "нормализатор" and confidence < 1.0:
+                    is_doubtful = True
+                    tag = "doubtful"
+                    if not confidence_note:
+                        confidence_note = f"Подобран через нормализатор (уверенность {confidence:.0%})"
+                elif source == "нормализатор" and confidence >= 1.0:
+                    is_doubtful = True
+                    tag = "doubtful"
+                    if not confidence_note:
+                        confidence_note = "Подобран через нормализатор"
+                elif confidence > 0 and confidence < 0.95:
+                    is_doubtful = True
+                    tag = "doubtful"
+                    if not confidence_note:
+                        confidence_note = f"Низкая уверенность ({confidence:.0%})"
+                elif source == "нормализатор" and confidence_note:
+                    is_doubtful = True
+                    tag = "doubtful"
+                elif confidence_note:
+                    is_doubtful = True
+                    tag = "doubtful"
+                else:
+                    tag = "found"
             else:
-                original_text = match.get('original_text', '')
                 display_name = f"[НЕ НАЙДЕНО] {original_text[:80]}"
-            
-            tag = "found" if success else "not_found"
+                tag = "not_found"
+                if not confidence_note:
+                    confidence_note = "Не найдено в базе"
+
+            # Сохраняем индекс сомнительной строки
+            if is_doubtful:
+                self._doubtful_indices.append(i)
+
             self._tree.insert("", "end", values=[article, display_name, quantity], tags=(tag,))
+        # ======================================================================
 
         # Скроллбары для таблицы
         vsb = ttk.Scrollbar(table_frame, orient="vertical", command=self._tree.yview)
@@ -295,14 +334,12 @@ class EquipmentDialog:
         table_frame.grid_rowconfigure(0, weight=1)
         table_frame.grid_columnconfigure(0, weight=1)
 
-        # Добавляем таблицу в верхнюю панель разделителя
         self._paned_window.add(table_frame, stretch="always")
 
         # ========== НИЖНЯЯ ПАНЕЛЬ: ИСХОДНЫЕ ДАННЫЕ ==========
         if self.original_text:
             original_frame = ttk.Frame(self._paned_window, style="EqDlg.TFrame")
             
-            # Создаём текстовое поле с прокруткой
             text_container = ttk.Frame(original_frame)
             text_container.pack(fill="both", expand=True, padx=5, pady=5)
 
@@ -316,21 +353,35 @@ class EquipmentDialog:
             )
             self._original_text_widget.pack(side="left", fill="both", expand=True)
             
-            # Вставляем исходный текст
-            self._original_text_widget.insert("1.0", self.original_text)
+            # ========== НАСТРАИВАЕМ ТЕГ ДЛЯ ПОДСВЕТКИ ==========
+            self._original_text_widget.tag_configure("doubtful_line", background="#fff3e0")
+            # ===================================================
+
+            # ========== ВСТАВЛЯЕМ ТЕКСТ С ПОДСВЕТКОЙ ==========
+            lines = self.original_text.split('\n')
+            
+            # Проходим по строкам и проверяем, является ли строка сомнительной
+            # Сопоставляем matches[i] со строкой i (порядок сохраняется)
+            for i, line in enumerate(lines):
+                # Проверяем, есть ли этот индекс в списке сомнительных
+                if i in self._doubtful_indices:
+                    # Добавляем красный восклицательный знак в конце
+                    display_line = line.rstrip() + " ❗"
+                    self._original_text_widget.insert(f"{i+1}.0", display_line + "\n", "doubtful_line")
+                else:
+                    self._original_text_widget.insert(f"{i+1}.0", line + "\n")
+            # ===================================================
+            
             self._original_text_widget.config(state="disabled")
             
-            # Скроллбары для текстового поля
             text_vsb = ttk.Scrollbar(text_container, orient="vertical", command=self._original_text_widget.yview)
             text_hsb = ttk.Scrollbar(original_frame, orient="horizontal", command=self._original_text_widget.xview)
             self._original_text_widget.configure(yscrollcommand=text_vsb.set, xscrollcommand=text_hsb.set)
             text_vsb.pack(side="right", fill="y")
             text_hsb.pack(side="bottom", fill="x")
             
-            # Добавляем текстовое поле в нижнюю панель разделителя
             self._paned_window.add(original_frame, stretch="always")
             
-            # Восстанавливаем сохранённую позицию разделителя
             saved_position = self._get_saved_pane_position()
             if saved_position:
                 self._dialog.after(100, lambda: self._paned_window.sashpos(0, saved_position))
@@ -348,6 +399,7 @@ class EquipmentDialog:
 
         self._dialog.protocol("WM_DELETE_WINDOW", self._close)
         self._tree.focus_set()
+
     def _close(self) -> None:
         """Закрывает диалог и сохраняет позицию разделителя."""
         self._save_pane_position()
