@@ -82,7 +82,7 @@ class SpecNormalizer:
         self._load_builtin_strategies()  # ПОТОМ встроенные
     
     def _load_builtin_strategies(self):
-        """Загружает встроенные стратегии (добавляет к существующим)."""
+        """Загружает встроенные стратегии (включая стратегии из шаблонов)."""
         builtin = [
             ("oasis", self._parse_oasis, 0.95),
             ("arbonia_ftv", self._parse_arbonia_ftv, 0.92),
@@ -97,9 +97,30 @@ class SpecNormalizer:
             ("universal_triplet", self._parse_universal_triplet, 0.85),
             ("compact_triplet", self._parse_compact_triplet, 0.85),
             ("height_length", self._parse_height_length_only, 0.65),
+            
+            # ================================================================
+            # СТРАТЕГИИ ИЗ ШАБЛОНОВ (МИГРИРОВАНЫ ИЗ templates.json)
+            # ================================================================
+            ("template_001", self._parse_template_001, 0.95),
+            ("template_002", self._parse_template_002, 0.95),
+            ("template_003", self._parse_template_003, 0.95),
+            ("template_004", self._parse_template_004, 0.95),
+            ("template_005", self._parse_template_005, 0.95),
+            ("template_006", self._parse_template_006, 0.95),
+            ("template_007", self._parse_template_007, 0.95),
+            ("template_008", self._parse_template_008, 0.95),
+            ("template_009", self._parse_template_009, 0.95),
+            ("template_010", self._parse_template_010, 0.95),
+            ("template_011", self._parse_template_011, 0.95),
+            ("template_012", self._parse_template_012, 0.95),
+            ("template_013", self._parse_template_013, 0.95),
+            ("template_014", self._parse_template_014, 0.95),
+            ("template_015", self._parse_template_015, 0.95),
+            ("template_016", self._parse_template_016, 0.95),
         ]
+        
         self._strategies.extend(builtin)
-        # Сортируем по приоритету (убывание) — шаблоны имеют приоритет 0.9-0.95
+        # Сортируем по приоритету (убывание)
         self._strategies.sort(key=lambda x: x[2], reverse=True)
     
     def _load_templates(self):
@@ -1611,6 +1632,442 @@ class SpecNormalizer:
             self._log(f"Height-length parser error: {e}", "ERROR")
             return None
 
+    # ========================================================================
+    # СТРАТЕГИИ ИЗ ШАБЛОНОВ (МИГРИРОВАНЫ ИЗ templates.json)
+    # ========================================================================
+
+    def _parse_template_001(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
+        """
+        Шаблон: PB {type}-{height}-{length}
+        Оригинал: PB 22-40-400
+        Connection: K-боковое
+        height_transform: code * 10 (40 → 400)
+        length_transform: direct (400 → 400)
+        """
+        pattern = r'\bPB\ (\d+)-(\d+)-([\d,]+)(?:\s|$|[,.;:!?])'
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            return None
+        
+        type_str = match.group(1)
+        height = int(match.group(2)) * 10  # code * 10
+        length = int(match.group(3))       # direct
+        
+        return self._create_parsed_result(
+            type_str=type_str,
+            height=height,
+            length=length,
+            connection="K-боковое",
+            source="template_001",
+            confidence=0.95
+        )
+
+    def _parse_template_002(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
+        """
+        Шаблон: PN {type}-{height}-{length}
+        Оригинал: PN 22-40-400
+        Connection: VK-правое
+        height_transform: code * 10 (40 → 400)
+        length_transform: direct (400 → 400)
+        """
+        pattern = r'\bPN\ (\d+)-(\d+)-([\d,]+)(?:\s|$|[,.;:!?])'
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            return None
+        
+        type_str = match.group(1)
+        height = int(match.group(2)) * 10  # code * 10
+        length = int(match.group(3))       # direct
+        
+        return self._create_parsed_result(
+            type_str=type_str,
+            height=height,
+            length=length,
+            connection="VK-правое",
+            source="template_002",
+            confidence=0.95
+        )
+
+    def _parse_template_003(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
+        """
+        Шаблон: стальной пан. радиатор therm-x2 Profil -V FTV {type}-{height}-{length} ПРАВ. с нижним присоедин. патрубками...
+        Оригинал: стальной пан. радиатор therm-x2 Profil -V FTV 22-040-400 ПРАВ. с нижним присоедин. патрубками...
+        Connection: VK-правое
+        height_transform: code * 10 (040 → 400)
+        length_transform: direct (400 → 400)
+        """
+        pattern = r'\bстальной\ пан\.\ радиатор\ therm\-x2\ Profil\ \-V\ FTV\ (\d+)-(\d+)-([\d,]+)\ ПРАВ\.\ с\ нижним\ присоедин\.\ патрубками'
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            return None
+        
+        type_str = match.group(1)
+        height = int(match.group(2)) * 10  # code * 10
+        length = int(match.group(3))       # direct
+        
+        return self._create_parsed_result(
+            type_str=type_str,
+            height=height,
+            length=length,
+            connection="VK-правое",
+            source="template_003",
+            confidence=0.95
+        )
+
+    def _parse_template_004(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
+        """
+        Шаблон: стальной пан. радиатор therm-x2 Profil -V FTV {type}-{height}-{length} ЛЕВЫЙ. с нижним присоедин. патрубками...
+        Оригинал: стальной пан. радиатор therm-x2 Profil -V FTV 22-040-400 ЛЕВЫЙ. с нижним присоедин. патрубками...
+        Connection: VK-правое
+        height_transform: code * 10 (040 → 400)
+        length_transform: direct (400 → 400)
+        """
+        pattern = r'\bстальной\ пан\.\ радиатор\ therm\-x2\ Profil\ \-V\ FTV\ (\d+)-(\d+)-([\d,]+)\ ЛЕВЫЙ\.\ с\ нижним\ присоедин\.\ патрубками'
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            return None
+        
+        type_str = match.group(1)
+        height = int(match.group(2)) * 10  # code * 10
+        length = int(match.group(3))       # direct
+        
+        return self._create_parsed_result(
+            type_str=type_str,
+            height=height,
+            length=length,
+            connection="VK-правое",
+            source="template_004",
+            confidence=0.95
+        )
+
+    def _parse_template_005(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
+        """
+        Шаблон: стальной пан. радиатор therm-x2 Profil -V FTV {type}-{height}-{length} ПРАВЫЙ. с нижним присоедин. патрубками...
+        Оригинал: стальной пан. радиатор therm-x2 Profil -V FTV 22-060-400 ПРАВЫЙ. с нижним присоедин. патрубками...
+        Connection: VK-правое
+        height_transform: code * 10 (060 → 600)
+        length_transform: direct (400 → 400)
+        """
+        pattern = r'\bстальной\ пан\.\ радиатор\ therm\-x2\ Profil\ \-V\ FTV\ (\d+)-(\d+)-([\d,]+)\ ПРАВЫЙ\.\ с\ нижним\ присоедин\.\ патрубками'
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            return None
+        
+        type_str = match.group(1)
+        height = int(match.group(2)) * 10  # code * 10
+        length = int(match.group(3))       # direct
+        
+        return self._create_parsed_result(
+            type_str=type_str,
+            height=height,
+            length=length,
+            connection="VK-правое",
+            source="template_005",
+            confidence=0.95
+        )
+
+    def _parse_template_006(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
+        """
+        Шаблон: стальной пан. радиатор therm-x2 Profil -V FTV {type}-{height}-{length} лев. с нижним присоедин. патрубками...
+        Оригинал: стальной пан. радиатор therm-x2 Profil -V FTV 22-030-400 лев. с нижним присоедин. патрубками...
+        Connection: VK-правое
+        height_transform: code * 10 (030 → 300)
+        length_transform: direct (400 → 400)
+        """
+        pattern = r'\bстальной\ пан\.\ радиатор\ therm\-x2\ Profil\ \-V\ FTV\ (\d+)-(\d+)-([\d,]+)\ лев\.\ с\ нижним\ присоедин\.\ патрубками'
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            return None
+        
+        type_str = match.group(1)
+        height = int(match.group(2)) * 10  # code * 10
+        length = int(match.group(3))       # direct
+        
+        return self._create_parsed_result(
+            type_str=type_str,
+            height=height,
+            length=length,
+            connection="VK-правое",
+            source="template_006",
+            confidence=0.95
+        )
+
+    def _parse_template_007(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
+        """
+        Шаблон: стальной пан. радиатор therm-x2 Profil -K FKO {type}-{height}-{length} лев. с нижним присоедин. патрубками...
+        Оригинал: стальной пан. радиатор therm-x2 Profil -K FKO 22-030-1000 лев. с нижним присоедин. патрубками...
+        Connection: K-боковое
+        height_transform: code * 10 (030 → 300)
+        length_transform: direct (1000 → 1000)
+        """
+        pattern = r'\bстальной\ пан\.\ радиатор\ therm\-x2\ Profil\ \-K\ FKO\ (\d+)-(\d+)-([\d,]+)\ лев\.\ с\ нижним\ присоедин\.\ патрубками'
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            return None
+        
+        type_str = match.group(1)
+        height = int(match.group(2)) * 10  # code * 10
+        length = int(match.group(3))       # direct
+        
+        return self._create_parsed_result(
+            type_str=type_str,
+            height=height,
+            length=length,
+            connection="K-боковое",
+            source="template_007",
+            confidence=0.95
+        )
+
+    def _parse_template_008(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
+        """
+        Шаблон: стальной пан. радиатор therm-x2 Profil -K FKO {type}-{height}-{length} прав. с нижним присоедин. патрубками...
+        Оригинал: стальной пан. радиатор therm-x2 Profil -K FKO 22-030-1400 прав. с нижним присоедин. патрубками...
+        Connection: K-боковое
+        height_transform: code * 10 (030 → 300)
+        length_transform: direct (1400 → 1400)
+        """
+        pattern = r'\bстальной\ пан\.\ радиатор\ therm\-x2\ Profil\ \-K\ FKO\ (\d+)-(\d+)-([\d,]+)\ прав\.\ с\ нижним\ присоедин\.\ патрубками'
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            return None
+        
+        type_str = match.group(1)
+        height = int(match.group(2)) * 10  # code * 10
+        length = int(match.group(3))       # direct
+        
+        return self._create_parsed_result(
+            type_str=type_str,
+            height=height,
+            length=length,
+            connection="K-боковое",
+            source="template_008",
+            confidence=0.95
+        )
+
+    def _parse_template_009(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
+        """
+        Шаблон: стальной пан. радиатор therm-x2 Profil -V FTV {type}-{height}-{length} пра. с нижним присоедин. патрубками...
+        Оригинал: стальной пан. радиатор therm-x2 Profil -V FTV 22-030-1200 пра. с нижним присоедин. патрубками...
+        Connection: VK-правое
+        height_transform: code * 10 (030 → 300)
+        length_transform: direct (1200 → 1200)
+        """
+        pattern = r'\bстальной\ пан\.\ радиатор\ therm\-x2\ Profil\ \-V\ FTV\ (\d+)-(\d+)-([\d,]+)\ пра\.\ с\ нижним\ присоедин\.\ патрубками'
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            return None
+        
+        type_str = match.group(1)
+        height = int(match.group(2)) * 10  # code * 10
+        length = int(match.group(3))       # direct
+        
+        return self._create_parsed_result(
+            type_str=type_str,
+            height=height,
+            length=length,
+            connection="VK-правое",
+            source="template_009",
+            confidence=0.95
+        )
+
+    def _parse_template_010(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
+        """
+        Шаблон: Стальной панельный радиатор PRADO Universal {type}, h={height}мм, нижнее подключение, L=0,{length}м
+        Оригинал: Стальной панельный радиатор PRADO Universal 20, h=300мм, нижнее подключение, L=0,4м
+        Connection: VK-правое
+        height_transform: direct (300 → 300)
+        length_transform: code * 100 (0,4 → 400)
+        """
+        pattern = r'\bСтальной\ панельный\ радиатор\ PRADO\ Universal\ (\d+),\ h=(\d+)мм,\ нижнее\ подключение,\ L=0,([\d,]+)м'
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            return None
+        
+        type_str = match.group(1)
+        height = int(match.group(2))              # direct
+        length = int(match.group(3)) * 100        # code * 100
+        
+        return self._create_parsed_result(
+            type_str=type_str,
+            height=height,
+            length=length,
+            connection="VK-правое",
+            source="template_010",
+            confidence=0.95
+        )
+
+    def _parse_template_011(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
+        """
+        Шаблон: Стальной панельный радиатор PRADO Universal {type}, h={height}мм, нижнее подключение, L={length}м
+        Оригинал: Стальной панельный радиатор PRADO Universal 21, h=500мм, нижнее подключение, L=1,0м
+        Connection: VK-правое
+        height_transform: direct (500 → 500)
+        length_transform: parse_decimal (1,0 → 1000)
+        """
+        pattern = r'\bСтальной\ панельный\ радиатор\ PRADO\ Universal\ (\d+),\ h=(\d+)мм,\ нижнее\ подключение,\ L=([\d,]+)м'
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            return None
+        
+        type_str = match.group(1)
+        height = int(match.group(2))              # direct
+        
+        # parse_decimal: 1,0 → 1000
+        length_clean = match.group(3).replace(',', '.')
+        length_float = float(length_clean)
+        length = int(length_float * 1000)
+        
+        return self._create_parsed_result(
+            type_str=type_str,
+            height=height,
+            length=length,
+            connection="VK-правое",
+            source="template_011",
+            confidence=0.95
+        )
+
+    def _parse_template_012(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
+        """
+        Шаблон: Стальной панельный радиатор PRADO Classic {type}, h={height}мм, боковое подключение, L={length}м
+        Оригинал: Стальной панельный радиатор PRADO Classic 22, h=300мм, боковое подключение, L=0,7м
+        Connection: K-боковое
+        height_transform: direct (300 → 300)
+        length_transform: parse_decimal (0,7 → 700)
+        """
+        pattern = r'\bСтальной\ панельный\ радиатор\ PRADO\ Classic\ (\d+),\ h=(\d+)мм,\ боковое\ подключение,\ L=([\d,]+)м'
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            return None
+        
+        type_str = match.group(1)
+        height = int(match.group(2))              # direct
+        
+        # parse_decimal: 0,7 → 700
+        length_clean = match.group(3).replace(',', '.')
+        length_float = float(length_clean)
+        length = int(length_float * 1000)
+        
+        return self._create_parsed_result(
+            type_str=type_str,
+            height=height,
+            length=length,
+            connection="K-боковое",
+            source="template_012",
+            confidence=0.95
+        )
+
+    def _parse_template_013(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
+        """
+        Шаблон: Стальной панельный радиатор PRADO Classic {type}, h={height}мм, нижнее подключение, L={length}м
+        Оригинал: Стальной панельный радиатор PRADO Classic 33, h=300мм, нижнее подключение, L=0,9м
+        Connection: K-боковое
+        height_transform: direct (300 → 300)
+        length_transform: parse_decimal (0,9 → 900)
+        """
+        pattern = r'\bСтальной\ панельный\ радиатор\ PRADO\ Classic\ (\d+),\ h=(\d+)мм,\ нижнее\ подключение,\ L=([\d,]+)м'
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            return None
+        
+        type_str = match.group(1)
+        height = int(match.group(2))              # direct
+        
+        # parse_decimal: 0,9 → 900
+        length_clean = match.group(3).replace(',', '.')
+        length_float = float(length_clean)
+        length = int(length_float * 1000)
+        
+        return self._create_parsed_result(
+            type_str=type_str,
+            height=height,
+            length=length,
+            connection="K-боковое",
+            source="template_013",
+            confidence=0.95
+        )
+
+    def _parse_template_014(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
+        """
+        Шаблон: Стальной панельный радиатор PRADO Classicl {type}, h={height}мм, нижнее подключение, L={length}м
+        Оригинал: Стальной панельный радиатор PRADO Classicl 33, h=300мм, нижнее подключение, L=1,7м
+        Connection: K-боковое
+        height_transform: direct (300 → 300)
+        length_transform: parse_decimal (1,7 → 1700)
+        """
+        pattern = r'\bСтальной\ панельный\ радиатор\ PRADO\ Classicl\ (\d+),\ h=(\d+)мм,\ нижнее\ подключение,\ L=([\d,]+)м'
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            return None
+        
+        type_str = match.group(1)
+        height = int(match.group(2))              # direct
+        
+        # parse_decimal: 1,7 → 1700
+        length_clean = match.group(3).replace(',', '.')
+        length_float = float(length_clean)
+        length = int(length_float * 1000)
+        
+        return self._create_parsed_result(
+            type_str=type_str,
+            height=height,
+            length=length,
+            connection="K-боковое",
+            source="template_014",
+            confidence=0.95
+        )
+
+    def _parse_template_015(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
+        """
+        Шаблон: 3.1. PURMO CV {type}s {height}x{length}
+        Оригинал: 3.1. PURMO CV 21s 300x800
+        Connection: VK-правое
+        height_transform: direct (300 → 300)
+        length_transform: direct (800 → 800)
+        """
+        pattern = r'\b3\.1\.\ PURMO\ CV\ (\d+)s\ (\d+)x([\d,]+)(?:\s|$|[,.;:!?])'
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            return None
+        
+        type_str = match.group(1)
+        height = int(match.group(2))       # direct
+        length = int(match.group(3))       # direct
+        
+        return self._create_parsed_result(
+            type_str=type_str,
+            height=height,
+            length=length,
+            connection="VK-правое",
+            source="template_015",
+            confidence=0.95
+        )
+
+    def _parse_template_016(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
+        """
+        Шаблон: {type}s {height}x{length}
+        Оригинал: 3.2. PURMO CV 21s 500x1100
+        Connection: VK-правое
+        height_transform: direct (500 → 500)
+        length_transform: direct (1100 → 1100)
+        """
+        pattern = r'\b(\d+)s\ (\d+)x([\d,]+)(?:\s|$|[,.;:!?])'
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            return None
+        
+        type_str = match.group(1)
+        height = int(match.group(2))       # direct
+        length = int(match.group(3))       # direct
+        
+        return self._create_parsed_result(
+            type_str=type_str,
+            height=height,
+            length=length,
+            connection="VK-правое",
+            source="template_016",
+            confidence=0.95
+        )
+
     def _guess_type_from_context(self, text: str) -> str:
         """Угадывает тип радиатора из контекста."""
         try:
@@ -1683,6 +2140,49 @@ class SpecNormalizer:
             self._log(f"Validation error: {e}", "ERROR")
             result.recognized = False
             return result
+
+    def _create_parsed_result(
+        self,
+        type_str: str,
+        height: int,
+        length: int,
+        connection: str,
+        source: str,
+        confidence: float
+    ) -> Optional[ParsedRadiator]:
+        """
+        Общий метод для создания ParsedRadiator с валидацией.
+        Используется стратегиями из шаблонов.
+        """
+        # Преобразуем тип
+        rad_type = type_str
+        if rad_type not in ['10', '11', '20', '21', '22', '30', '33']:
+            if rad_type == '12':
+                rad_type = '21'
+            else:
+                return None
+        
+        # Проверяем высоту
+        if height not in [300, 400, 500, 600, 900]:
+            # Пытаемся исправить через HEIGHT_MAPPING
+            if height in self.HEIGHT_MAPPING:
+                height = self.HEIGHT_MAPPING[height]
+            else:
+                return None
+        
+        # Проверяем длину
+        if length < 400 or length > 3000 or length % 100 != 0:
+            return None
+        
+        result = ParsedRadiator()
+        result.recognized = True
+        result.connection = connection
+        result.rad_type = rad_type
+        result.height = height
+        result.length = length
+        result.confidence = confidence
+        result.source = source
+        return result
 
     def _find_closest_height(self, height: int) -> int:
         """Находит ближайшую стандартную высоту."""

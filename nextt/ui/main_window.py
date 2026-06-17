@@ -1119,13 +1119,24 @@ class MainWindow:
         self.bracket_discount_var.set("0")
         self.bracket_var.set("Настенные кронштейны")
         
-        # 3. Очистка кэша данных таблицы соответствия
-        self._clear_cache()
+        # 3. ПОЛНАЯ ОЧИСТКА ДАННЫХ ТАБЛИЦЫ СООТВЕТСТВИЯ
+        if hasattr(self.app, '_all_correspondence_data'):
+            self.app._all_correspondence_data = None
+        if hasattr(self.app, '_all_correspondence_data_for_export'):
+            self.app._all_correspondence_data_for_export = None
+        if hasattr(self.app, '_last_correspondence_data'):
+            self.app._last_correspondence_data = None
+        if hasattr(self.app, '_last_correspondence_dialog'):
+            self.app._last_correspondence_dialog = None
         
-        # 4. Закрытие всех вспомогательных окон
+        # 4. Деактивируем кнопку "Аналоги"
+        if hasattr(self, '_edit_correspondence_btn'):
+            self._edit_correspondence_btn.config(state="disabled")
+        
+        # 5. Закрытие всех вспомогательных окон
         self._close_all_child_windows()
         
-        # 5. Перестроение матрицы
+        # 6. Перестроение матрицы
         self._build_matrix(self._conn_var.get(), self._type_var.get())
         
         logger.info("Сброс выполнен: матрица очищена, кэш сброшен, окна закрыты, данные таблицы соответствия удалены")

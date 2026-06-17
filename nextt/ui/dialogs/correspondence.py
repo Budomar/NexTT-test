@@ -718,6 +718,14 @@ class CorrespondenceDialog:
         all_items = tree.get_children()
         logger.info(f"Переподбор: строк в таблице={len(all_items)}")
         
+        # ================================================================
+        # ВАЖНО: перезагружаем шаблоны в SpecNormalizer перед переподбором
+        # ================================================================
+        if hasattr(self.app, 'normalizer'):
+            self.app.normalizer.reload_templates()
+            logger.info("Шаблоны перезагружены в SpecNormalizer")
+        # ================================================================
+        
         # Загружаем шаблоны один раз
         from nextt.patterns.template_manager import TemplateManager
         template_manager = TemplateManager()
@@ -801,6 +809,16 @@ class CorrespondenceDialog:
         if not self._tree:
             return
 
+        # ================================================================
+        # ПРИНУДИТЕЛЬНЫЙ ПЕРЕПОДБОР ПЕРЕД СОХРАНЕНИЕМ
+        # ================================================================
+        # Это гарантирует, что все строки (кроме ручного ввода) 
+        # будут обновлены по последним шаблонам
+        logger.info("Запуск принудительного переподбора перед переносом в матрицу")
+        updated_count = self._apply_patterns_to_all_rows(self._tree)
+        logger.info(f"Переподбор обновил {updated_count} строк")
+        # ================================================================
+
         # ========== СОХРАНЯЕМ СОСТОЯНИЕ ПЕРЕД ПЕРЕНОСОМ ==========
         self._save_current_state()
         # ========================================================
@@ -859,32 +877,59 @@ class CorrespondenceDialog:
                     self.app.entry_values[key] = new_val
                     transferred += 1
 
-        if correspondence_data:
-            import pandas as pd
-            self._saved_correspondence_data = pd.DataFrame(correspondence_data)
-            
-            # Обновляем _last_correspondence_data из текущего состояния Treeview
-            updated_data = []
-            for item in self._tree.get_children():
-                values = list(self._tree.item(item, "values"))
-                if len(values) >= 5:
-                    updated_data.append({
-                        "Наименование": values[0],
-                        "Кол-во": values[1],
-                        "Наименование LaggarTT": values[2],
-                        "Артикул LaggarTT": values[3],
-                        "Источник": values[4],
-                    })
-            self.app._last_correspondence_data = pd.DataFrame(updated_data)
-            
-            logger.info(f"Перенесено в матрицу: {transferred} позиций")
-            logger.info(f"Данные таблицы соответствия сохранены: {len(correspondence_data)} строк (только с артикулами)")
+        # ================================================================
+        # СОХРАНЕНИЕ С НАКОПЛЕНИЕМ (append_mode = True)
+        # ================================================================
+        new_df = pd.DataFrame(correspondence_data)
+        
+        # Фильтруем только строки с артикулами
+        if not new_df.empty:
+            new_df = new_df[new_df["Артикул LaggarTT"] != ""]
+            new_df = new_df[new_df["Артикул LaggarTT"].notna()]
+            new_df = new_df[new_df["Источник"] != "Не подобрано"]
+            logger.info(f"После фильтрации осталось {len(new_df)} строк (только с артикулами)")
+        
+        # Проверяем, есть ли уже сохранённые данные
+        if hasattr(self.app, '_all_correspondence_data') and self.app._all_correspondence_data is not None:
+            if not self.app._all_correspondence_data.empty:
+                old_df = self.app._all_correspondence_data.copy()
+                logger.info(f"Найдены существующие данные: {len(old_df)} строк")
+                
+                # Объединяем старые и новые данные
+                combined_df = pd.concat([old_df, new_df], ignore_index=True)
+                logger.info(f"Объединено: {len(old_df)} + {len(new_df)} = {len(combined_df)} строк")
+                
+                # Сохраняем в обе переменные
+                self.app._all_correspondence_data = combined_df.copy()
+                self.app._all_correspondence_data_for_export = combined_df.copy()
+            else:
+                # Существующие данные есть, но пустые
+                self.app._all_correspondence_data = new_df.copy()
+                self.app._all_correspondence_data_for_export = new_df.copy()
+                logger.info(f"Сохранено {len(new_df)} строк (существующие данные были пусты)")
+        else:
+            # Нет сохранённых данных
+            self.app._all_correspondence_data = new_df.copy()
+            self.app._all_correspondence_data_for_export = new_df.copy()
+            logger.info(f"Сохранено {len(new_df)} строк (первая загрузка)")
+        
+        # Сохраняем последние данные для отображения
+        self.app._last_correspondence_data = new_df.copy()
+        # ================================================================
+
+        logger.info(f"Перенесено в матрицу: {transferred} позиций")
+        logger.info(f"Всего строк в хранилище: {len(self.app._all_correspondence_data)}")
 
         if hasattr(self.app, 'main_window') and self.app.main_window:
             self.app.main_window._build_matrix(
                 self.app.main_window._conn_var.get(),
                 self.app.main_window._type_var.get()
             )
+
+        # ========== АКТИВИРУЕМ КНОПКУ "АНАЛОГИ" ==========
+        if hasattr(self.app.main_window, '_edit_correspondence_btn'):
+            self.app.main_window._edit_correspondence_btn.config(state="normal")
+        # ==================================================
 
         self._close()
 

@@ -482,6 +482,14 @@ class MeteorSelector:
             if template:
                 template_manager.save()
                 logger.info(f"  Шаблон создан и сохранён: {template.name}")
+                
+                # ================================================================
+                # ВАЖНО: перезагружаем шаблоны в SpecNormalizer
+                # ================================================================
+                if hasattr(self.app, 'normalizer'):
+                    self.app.normalizer.reload_templates()
+                    logger.info("  Шаблоны перезагружены в SpecNormalizer")
+                # ================================================================
             else:
                 logger.warning("  Не удалось создать шаблон")
         except Exception as e:

@@ -125,6 +125,7 @@ class TemplateManager:
     ) -> Optional[Template]:
         """
         Анализирует название и создаёт шаблон-маску.
+        Теперь поддерживает любые форматы длины (0,4м, 1,2м, 1,0м, 1200мм и т.д.)
         """
         name = original_name.strip()
         
@@ -132,6 +133,8 @@ class TemplateManager:
         logger.info(f"📊 СОЗДАНИЕ ШАБЛОНА")
         logger.info(f"   Название: '{name}'")
         logger.info(f"   Аналог: {analog_connection} {analog_type}/{analog_height}/{analog_length}")
+        logger.info(f"   Тип данных height: {type(analog_height)}, value: {analog_height}")
+        logger.info(f"   Тип данных length: {type(analog_length)}, value: {analog_length}")
         logger.info("=" * 60)
         
         # ==================================================================
@@ -145,7 +148,13 @@ class TemplateManager:
             return None
         
         # ==================================================================
-        # ШАГ 2: Сопоставляем числа с параметрами аналога
+        # ШАГ 2: Находим также десятичные числа (с запятой или точкой)
+        # ==================================================================
+        decimal_numbers = re.findall(r'\d+[.,]\d+', name)
+        logger.info(f"📊 Найдены десятичные числа: {decimal_numbers}")
+        
+        # ==================================================================
+        # ШАГ 3: Сопоставляем числа с параметрами аналога
         # ==================================================================
         type_idx = -1
         type_value = None
@@ -153,6 +162,7 @@ class TemplateManager:
         height_value = None
         length_idx = -1
         length_value = None
+        length_is_decimal = False
         
         # Ищем тип
         for i, num in enumerate(numbers):
@@ -166,124 +176,203 @@ class TemplateManager:
             logger.warning(f"   ❌ Не найдено число для типа {analog_type}")
             return None
         
-        # Ищем высоту
+        # Ищем высоту - с приоритетами и исключением номеров строк
+        possible_height_numbers = []
+        
         for i, num in enumerate(numbers):
             if i == type_idx:
                 continue
-            num_int = int(num)
-            # Прямое совпадение
-            if num_int == analog_height:
-                height_idx = i
-                height_value = num
-                logger.info(f"   ✅ Высота: число '{num}' на позиции {i} (прямое совпадение)")
-                break
-            # Умножение на 10
-            elif num_int * 10 == analog_height:
-                height_idx = i
-                height_value = num
-                logger.info(f"   ✅ Высота: число '{num}' на позиции {i} (нужно *10 → {num_int * 10})")
-                break
-            # Умножение на 100
-            elif num_int * 100 == analog_height:
-                height_idx = i
-                height_value = num
-                logger.info(f"   ✅ Высота: число '{num}' на позиции {i} (нужно *100 → {num_int * 100})")
-                break
-            # Деление на 10 (например, 3000 → 300)
-            elif num_int // 10 == analog_height and num_int % 10 == 0:
-                height_idx = i
-                height_value = num
-                logger.info(f"   ✅ Высота: число '{num}' на позиции {i} (нужно /10 → {num_int // 10})")
-                break
-            # Деление на 100 (например, 30000 → 300)
-            elif num_int // 100 == analog_height and num_int % 100 == 0:
-                height_idx = i
-                height_value = num
-                logger.info(f"   ✅ Высота: число '{num}' на позиции {i} (нужно /100 → {num_int // 100})")
-                break
+            
+            # Проверяем, не является ли число номером строки
+            pos = name.find(num)
+            if pos != -1 and pos < 10 and len(num) <= 2:
+                next_char = name[pos + len(num)] if pos + len(num) < len(name) else ''
+                if next_char == '.':
+                    logger.info(f"   ⏭ Пропускаем номер строки: '{num}' на позиции {pos}")
+                    continue
+            
+            try:
+                num_int = int(num)
+                logger.info(f"   Проверяем число '{num}' = {num_int} мм, нужно {analog_height} мм")
+                
+                if num_int == analog_height:
+                    possible_height_numbers.append((i, num, "direct", 0))
+                    logger.info(f"      Прямое совпадение: {num_int} == {analog_height}")
+                elif num_int * 100 == analog_height:
+                    possible_height_numbers.append((i, num, "code * 100", 1))
+                    logger.info(f"      Код * 100: {num_int} * 100 == {analog_height}")
+                elif num_int * 10 == analog_height:
+                    possible_height_numbers.append((i, num, "code * 10", 2))
+                    logger.info(f"      Код * 10: {num_int} * 10 == {analog_height}")
+                elif num_int // 100 == analog_height and num_int % 100 == 0:
+                    possible_height_numbers.append((i, num, "code / 100", 3))
+                    logger.info(f"      Код / 100: {num_int} // 100 == {analog_height}")
+                elif num_int // 10 == analog_height and num_int % 10 == 0:
+                    possible_height_numbers.append((i, num, "code / 10", 4))
+                    logger.info(f"      Код / 10: {num_int} // 10 == {analog_height}")
+            except (ValueError, TypeError):
+                continue
         
-        if height_idx == -1:
-            logger.warning(f"   ❌ Не найдено число для высоты {analog_height}")
+        possible_height_numbers.sort(key=lambda x: x[3])
+        
+        if possible_height_numbers:
+            height_idx = possible_height_numbers[0][0]
+            height_value = possible_height_numbers[0][1]
+            height_transform = possible_height_numbers[0][2]
+            logger.info(f"   ✅ Высота: выбрано число '{height_value}' на позиции {height_idx} (transform: {height_transform})")
+        else:
+            logger.warning(f"   ❌ Не найдено подходящее число для высоты {analog_height}")
             return None
         
         # Ищем длину
-        for i, num in enumerate(numbers):
-            if i == type_idx or i == height_idx:
-                continue
-            num_int = int(num)
-            # Прямое совпадение
-            if num_int == analog_length:
-                length_idx = i
-                length_value = num
-                logger.info(f"   ✅ Длина: число '{num}' на позиции {i} (прямое совпадение)")
-                break
-            # Умножение на 10
-            elif num_int * 10 == analog_length:
-                length_idx = i
-                length_value = num
-                logger.info(f"   ✅ Длина: число '{num}' на позиции {i} (нужно *10 → {num_int * 10})")
-                break
-            # Умножение на 100
-            elif num_int * 100 == analog_length:
-                length_idx = i
-                length_value = num
-                logger.info(f"   ✅ Длина: число '{num}' на позиции {i} (нужно *100 → {num_int * 100})")
-                break
-            # Деление на 10
-            elif num_int // 10 == analog_length and num_int % 10 == 0:
-                length_idx = i
-                length_value = num
-                logger.info(f"   ✅ Длина: число '{num}' на позиции {i} (нужно /10 → {num_int // 10})")
-                break
-            # Деление на 100
-            elif num_int // 100 == analog_length and num_int % 100 == 0:
-                length_idx = i
-                length_value = num
-                logger.info(f"   ✅ Длина: число '{num}' на позиции {i} (нужно /100 → {num_int // 100})")
-                break
+        for dec_num in decimal_numbers:
+            dec_num_clean = dec_num.replace(',', '.')
+            try:
+                dec_num_float = float(dec_num_clean)
+                dec_num_mm = int(dec_num_float * 1000)
+                logger.info(f"   Проверяем десятичное число '{dec_num}' → {dec_num_mm} мм, нужно {analog_length} мм")
+                if dec_num_mm == analog_length:
+                    length_idx = -2
+                    length_value = dec_num
+                    length_is_decimal = True
+                    logger.info(f"   ✅ Длина: десятичное число '{dec_num}' на позиции → {analog_length} мм")
+                    break
+            except:
+                pass
         
         if length_idx == -1:
-            logger.warning(f"   ❌ Не найдено число для длины {analog_length}")
-            return None
+            possible_length_numbers = []
+            
+            for i, num in enumerate(numbers):
+                if i == type_idx or i == height_idx:
+                    continue
+                
+                pos = name.find(num)
+                if pos != -1 and pos < 10 and len(num) <= 2:
+                    next_char = name[pos + len(num)] if pos + len(num) < len(name) else ''
+                    if next_char == '.':
+                        logger.info(f"   ⏭ Пропускаем номер строки: '{num}' на позиции {pos}")
+                        continue
+                
+                try:
+                    num_int = int(num)
+                    logger.info(f"   Проверяем число '{num}' = {num_int} мм, нужно {analog_length} мм")
+                    
+                    if num_int == analog_length:
+                        possible_length_numbers.append((i, num, "direct", 0))
+                        logger.info(f"      Прямое совпадение: {num_int} == {analog_length}")
+                    elif num_int * 10 == analog_length:
+                        possible_length_numbers.append((i, num, "code * 10", 1))
+                        logger.info(f"      Код * 10: {num_int} * 10 == {analog_length}")
+                    elif num_int * 100 == analog_length:
+                        possible_length_numbers.append((i, num, "code * 100", 2))
+                        logger.info(f"      Код * 100: {num_int} * 100 == {analog_length}")
+                    elif num_int // 10 == analog_length and num_int % 10 == 0:
+                        possible_length_numbers.append((i, num, "code / 10", 3))
+                        logger.info(f"      Код / 10: {num_int} // 10 == {analog_length}")
+                    elif num_int // 100 == analog_length and num_int % 100 == 0:
+                        possible_length_numbers.append((i, num, "code / 100", 4))
+                        logger.info(f"      Код / 100: {num_int} // 100 == {analog_length}")
+                except (ValueError, TypeError):
+                    continue
+            
+            possible_length_numbers.sort(key=lambda x: x[3])
+            
+            if possible_length_numbers:
+                length_idx = possible_length_numbers[0][0]
+                length_value = possible_length_numbers[0][1]
+                length_transform = possible_length_numbers[0][2]
+                length_is_decimal = False
+                logger.info(f"   ✅ Длина: выбрано число '{length_value}' на позиции {length_idx} (transform: {length_transform})")
+            else:
+                logger.warning(f"   ❌ Не найдено подходящее число для длины {analog_length}")
+                return None
         
         # ==================================================================
-        # ШАГ 3: Находим позиции чисел в строке
+        # ШАГ 4: Находим позиции чисел в строке для создания маски
         # ==================================================================
-        # Находим все позиции чисел
         all_positions = []
         temp_name = name
         offset = 0
+        
         for num in numbers:
             pos = temp_name.find(num)
             if pos != -1:
-                all_positions.append((offset + pos, offset + pos + len(num), num))
+                all_positions.append((offset + pos, offset + pos + len(num), num, False))
                 offset += pos + len(num)
                 temp_name = temp_name[pos + len(num):]
             else:
-                all_positions.append((0, 0, num))
+                all_positions.append((0, 0, num, False))
         
-        # Берём только нужные числа
+        if length_is_decimal:
+            dec_pos = name.find(length_value)
+            if dec_pos != -1:
+                all_positions = [p for p in all_positions if p[2] != length_value]
+                all_positions.append((dec_pos, dec_pos + len(length_value), length_value, True))
+        
+        all_positions.sort(key=lambda x: x[0])
+        
+        # Выбираем нужные числа
         selected = []
-        for i, (start, end, num) in enumerate(all_positions):
-            if i == type_idx:
-                selected.append((start, end, num, 'type'))
-            elif i == height_idx:
-                selected.append((start, end, num, 'height'))
-            elif i == length_idx:
-                selected.append((start, end, num, 'length'))
+        found_type = False
+        found_height = False
+        found_length = False
+        
+        for start, end, num, is_decimal in all_positions:
+            if not found_type and (num == type_value or (type_value == '12' and num == '21')):
+                selected.append((start, end, num, 'type', is_decimal))
+                found_type = True
+            elif not found_height and num == height_value:
+                selected.append((start, end, num, 'height', is_decimal))
+                found_height = True
+            elif not found_length and num == length_value:
+                selected.append((start, end, num, 'length', is_decimal))
+                found_length = True
         
         selected.sort(key=lambda x: x[0])
         
         # ==================================================================
-        # ШАГ 4: Создаём маску
+        # ШАГ 5: Очищаем префикс от номеров строк
+        # ==================================================================
+        if selected:
+            first_selected_start = selected[0][0]
+            prefix = name[:first_selected_start]
+            
+            # Ищем и удаляем номера строк в префиксе
+            # Паттерн: цифры + точка + цифры + точка + пробел
+            pattern = r'^(\d+\.\d+\.\s*)'
+            match = re.match(pattern, prefix)
+            
+            if match:
+                line_number = match.group(1)
+                cleaned_prefix = prefix[len(line_number):]
+                logger.info(f"   🗑️ Удаляем номер строки из префикса: '{line_number}'")
+                logger.info(f"   📝 Очищенный префикс: '{cleaned_prefix}'")
+                
+                # Обновляем name, удаляя номер строки
+                name = cleaned_prefix + name[first_selected_start:]
+                
+                # Корректируем позиции в selected (сдвигаем влево на длину удаленного номера строки)
+                shift = len(line_number)
+                selected = [(s - shift, e - shift, num, marker, dec) for s, e, num, marker, dec in selected]
+                
+                # Обновляем last_end для создания маски
+                last_end = selected[0][0]
+                
+                logger.info(f"   📝 Обновленное имя: '{name}'")
+                logger.info(f"   📝 Новые позиции: {selected}")
+            else:
+                last_end = 0
+        else:
+            last_end = 0
+        
+        # ==================================================================
+        # ШАГ 6: Создаём маску
         # ==================================================================
         mask = ""
-        last_end = 0
         
-        for start, end, num, marker in selected:
-            # Добавляем текст до числа
+        for start, end, num, marker, is_decimal in selected:
             mask += name[last_end:start]
-            # Добавляем маркер
             if marker == 'type':
                 mask += '{type}'
             elif marker == 'height':
@@ -292,15 +381,18 @@ class TemplateManager:
                 mask += '{length}'
             last_end = end
         
-        # Добавляем хвост
         mask += name[last_end:]
         
         logger.info(f"   📝 Маска: '{mask}'")
         
         # ==================================================================
-        # ШАГ 5: Определяем преобразования
+        # ШАГ 7: Определяем преобразования
         # ==================================================================
-        def detect_transform(code_str: str, real_value: int) -> str:
+        def detect_transform(code_str: str, real_value: int, is_decimal: bool = False) -> str:
+            if is_decimal:
+                logger.info(f"   Десятичное число '{code_str}' → parse_decimal")
+                return "parse_decimal"
+            
             try:
                 code_int = int(code_str)
                 if code_int == real_value:
@@ -318,22 +410,21 @@ class TemplateManager:
             except:
                 return "direct"
         
-        height_transform = detect_transform(height_value, analog_height)
-        length_transform = detect_transform(length_value, analog_length)
+        height_transform = detect_transform(height_value, analog_height, False)
+        length_transform = detect_transform(length_value, analog_length, length_is_decimal)
         
         logger.info(f"   Преобразование высоты: '{height_value}' → {analog_height} -> {height_transform}")
         logger.info(f"   Преобразование длины: '{length_value}' → {analog_length} -> {length_transform}")
         
-        # Преобразование типа 12→21
         type_transform = {}
         if type_value == '12' and analog_type == '21':
             type_transform = {"12": "21"}
         
         # ==================================================================
-        # ШАГ 6: Создаём шаблон
+        # ШАГ 8: Создаём шаблон
         # ==================================================================
         template_id = f"template_{len(self._templates) + 1:03d}"
-        prefix_name = name[:20].upper() if name else "UNKNOWN"
+        prefix_name = original_name[:20].upper() if original_name else "UNKNOWN"
         template_name = f"{prefix_name}..."
         
         template = Template(
@@ -356,7 +447,6 @@ class TemplateManager:
         logger.info("=" * 60)
         
         return template
-
     # ==================================================================
     # ПРИМЕНЕНИЕ ШАБЛОНА
     # ==================================================================
@@ -381,17 +471,16 @@ class TemplateManager:
     def _apply_template(self, template: Template, name: str) -> Optional[Dict[str, Any]]:
         """
         Применяет один шаблон к названию.
+        Теперь ищет шаблон в любом месте строки (не только в начале).
         """
         # Получаем маску
         mask = template.mask
         
         # Превращаем маску в регулярное выражение
-        # Экранируем все символы, кроме маркеров {type}, {height}, {length}
         regex_pattern = ""
         i = 0
         while i < len(mask):
             if mask[i] == '{':
-                # Нашли начало маркера
                 j = mask.find('}', i)
                 if j != -1:
                     marker = mask[i:j+1]
@@ -400,36 +489,42 @@ class TemplateManager:
                     elif marker == '{height}':
                         regex_pattern += r'(\d+)'
                     elif marker == '{length}':
-                        regex_pattern += r'(\d+)'
+                        regex_pattern += r'([\d,]+)'
                     else:
                         regex_pattern += re.escape(marker)
                     i = j + 1
                     continue
-            # Обычный символ — экранируем
             regex_pattern += re.escape(mask[i])
             i += 1
         
-        # Добавляем якоря начала и конца
-        regex_pattern = '^' + regex_pattern + '$'
+        # ================================================================
+        # ИЗМЕНЕНИЕ: ищем шаблон в любом месте строки, а не только в начале
+        # ================================================================
+        # Было: regex_pattern = '^' + regex_pattern + '$'
+        # Стало: ищем шаблон где угодно, но требуем, чтобы после шаблона
+        #        не было других значимых символов (кроме пробелов и знаков препинания)
+        # ================================================================
+        # Ищем шаблон в любом месте строки
+        # \b - граница слова, чтобы не захватывать часть другого слова
+        search_pattern = r'\b' + regex_pattern + r'(?:\s|$|[,.;:!?])'
         
         logger.info(f"   Применяем шаблон: mask='{mask}'")
-        logger.info(f"   RegEx: {regex_pattern}")
+        logger.info(f"   RegEx (поиск): {search_pattern}")
         
-        match = re.search(regex_pattern, name, re.IGNORECASE)
+        # Ищем совпадение в любом месте строки
+        match = re.search(search_pattern, name, re.IGNORECASE)
         if not match:
             return None
         
-        # Извлекаем значения
         groups = match.groups()
         if len(groups) != 3:
             return None
         
-        # Определяем порядок маркеров в маске
+        # Определяем порядок маркеров
         type_pos_in_mask = mask.find('{type}')
         height_pos_in_mask = mask.find('{height}')
         length_pos_in_mask = mask.find('{length}')
         
-        # Сортируем позиции
         marker_positions = []
         if type_pos_in_mask != -1:
             marker_positions.append((type_pos_in_mask, 'type'))
@@ -439,7 +534,6 @@ class TemplateManager:
             marker_positions.append((length_pos_in_mask, 'length'))
         marker_positions.sort(key=lambda x: x[0])
         
-        # Сопоставляем группы с маркерами
         type_str = None
         height_str = None
         length_str = None
@@ -477,15 +571,20 @@ class TemplateManager:
         
         # Преобразуем длину
         try:
-            length = int(length_str)
             if template.length_transform == "code * 10":
-                length = length * 10
+                length = int(length_str) * 10
             elif template.length_transform == "code * 100":
-                length = length * 100
+                length = int(length_str) * 100
             elif template.length_transform == "code / 10":
-                length = length // 10
+                length = int(length_str) // 10
             elif template.length_transform == "code / 100":
-                length = length // 100
+                length = int(length_str) // 100
+            elif template.length_transform == "parse_decimal":
+                length_clean = length_str.replace(',', '.')
+                length_float = float(length_clean)
+                length = int(length_float * 1000)
+            else:
+                length = int(length_str)
         except:
             length = 0
         

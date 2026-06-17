@@ -247,10 +247,12 @@ class ExcelWriter:
                     row_data['Мощность, Вт']
                 ])
 
-                try:
-                    total_qty_corr += int(row_data['Количество'])
-                except (ValueError, TypeError):
-                    pass
+                art = str(row_data['Артикул LaggarTT']).strip()
+                if art and art != '' and art != 'None':
+                    try:
+                        total_qty_corr += int(row_data['Количество'])
+                    except (ValueError, TypeError):
+                        pass
 
                 for col in range(1, len(corr_headers) + 1):
                     cell = ws_corr.cell(row=i, column=col)
