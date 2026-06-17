@@ -1392,13 +1392,28 @@ class MainWindow:
             elif choice == "replace":
                 # Очищаем матрицу
                 self.app.entry_values.clear()
-                # Очищаем данные таблицы соответствия
+                
+                # ================================================================
+                # ПОЛНАЯ ОЧИСТКА ДАННЫХ ТАБЛИЦЫ СООТВЕТСТВИЯ
+                # ================================================================
+                if hasattr(self.app, '_all_correspondence_data'):
+                    self.app._all_correspondence_data = None
+                if hasattr(self.app, '_all_correspondence_data_for_export'):
+                    self.app._all_correspondence_data_for_export = None
+                if hasattr(self.app, '_last_correspondence_data'):
+                    self.app._last_correspondence_data = None
                 if hasattr(self.app, '_last_correspondence_dialog'):
-                    dialog = self.app._last_correspondence_dialog
-                    if hasattr(dialog, '_saved_correspondence_data'):
-                        dialog._saved_correspondence_data = None
+                    self.app._last_correspondence_dialog = None
+                # ================================================================
+                
+                # Деактивируем кнопку "Аналоги"
+                if hasattr(self, '_edit_correspondence_btn'):
+                    self._edit_correspondence_btn.config(state="disabled")
+                
                 # Обновляем матрицу
                 self._build_matrix(self._conn_var.get(), self._type_var.get())
+                
+                logger.info("Матрица и данные таблицы соответствия очищены (режим замены)")
             # Если choice == "add" — просто продолжаем, матрица не очищается
         
         try:
@@ -1441,7 +1456,7 @@ class MainWindow:
         except Exception as e:
             messagebox.showerror("Ошибка", f"Не удалось загрузить файл:\n{str(e)}")
             logger.error(f"Ошибка загрузки: {e}")
-
+            
     def _ask_add_or_replace(self) -> Optional[str]:
         """
         Показывает диалог выбора: добавить данные к существующим или заменить.
@@ -1987,61 +2002,17 @@ class MainWindow:
         logger.info(f"  Не найдено аналогов: {total_not_found}")
         logger.info("=" * 70)
         
-        # ========== ШАГ 3: Сохраняем данные ==========
-        new_df = pd.DataFrame(data_for_table)
+        # ========== ШАГ 3: ПОКАЗЫВАЕМ ДАННЫЕ В ДИАЛОГЕ (НЕ СОХРАНЯЕМ!) ==========
+        # Данные будут сохранены ТОЛЬКО при нажатии "Перенести в матрицу"
+        # ================================================================
         
-        if not new_df.empty:
-            new_df = new_df[new_df["Артикул LaggarTT"] != ""]
-            new_df = new_df[new_df["Артикул LaggarTT"].notna()]
-            new_df = new_df[new_df["Источник"] != "Не подобрано"]
-            logger.info(f"После фильтрации осталось {len(new_df)} строк (только с артикулами)")
-        
-        if append_mode and hasattr(self.app, '_all_correspondence_data') and self.app._all_correspondence_data is not None:
-            old_df = self.app._all_correspondence_data.copy()
-            if 'Оригинальное наименование' in old_df.columns:
-                old_df = old_df.rename(columns={
-                    'Оригинальное наименование': 'Наименование',
-                    'Количество': 'Кол-во',
-                    'Источник подбора': 'Источник',
-                })
-            needed_cols = ['Наименование', 'Кол-во', 'Наименование LaggarTT', 'Артикул LaggarTT', 'Источник']
-            old_df = old_df[[c for c in needed_cols if c in old_df.columns]]
-            combined_df = pd.concat([old_df, new_df], ignore_index=True)
-            if not combined_df.empty:
-                combined_df = combined_df[combined_df["Артикул LaggarTT"] != ""]
-                combined_df = combined_df[combined_df["Артикул LaggarTT"].notna()]
-                combined_df = combined_df[combined_df["Источник"] != "Не подобрано"]
-            logger.info(f"DEBUG Данные объединены: было {len(old_df)} + новых {len(new_df)} = {len(combined_df)} строк")
-        else:
-            combined_df = new_df.copy()
-            if not append_mode:
-                logger.info("Данные Excel заменены (append_mode=False)")
-        
-        all_data_for_export = pd.DataFrame(data_for_table)
-        if not all_data_for_export.empty:
-            all_data_for_export = all_data_for_export[all_data_for_export["Артикул LaggarTT"] != ""]
-            all_data_for_export = all_data_for_export[all_data_for_export["Артикул LaggarTT"].notna()]
-        
-        if append_mode and hasattr(self.app, '_all_correspondence_data_for_export') and self.app._all_correspondence_data_for_export is not None:
-            old_export = self.app._all_correspondence_data_for_export.copy()
-            combined_export = pd.concat([old_export, all_data_for_export], ignore_index=True)
-            self.app._all_correspondence_data_for_export = combined_export
-        else:
-            self.app._all_correspondence_data_for_export = all_data_for_export.copy()
-        
-        self.app._all_correspondence_data = combined_df.copy()
-        self.app._last_correspondence_data = pd.DataFrame(data_for_table).copy()
-        
-        logger.info(f"DEBUG _all_correspondence_data сохранён: {combined_df.shape[0]} строк")
-        logger.info(f"DEBUG _all_correspondence_data_for_export сохранён: {self.app._all_correspondence_data_for_export.shape[0]} строк")
-        
-        if hasattr(self, '_edit_correspondence_btn'):
-            self._edit_correspondence_btn.config(state="normal")
-        
+        # Открываем диалог с данными
         from nextt.ui.dialogs.correspondence import CorrespondenceDialog
         dialog = CorrespondenceDialog(self.app)
         self.app._last_correspondence_dialog = dialog
         dialog.show(pd.DataFrame(data_for_table))
+        
+        logger.info(f"Данные показаны в диалоге ({len(data_for_table)} строк). Сохранение произойдет при нажатии 'Перенести в матрицу'")
 
     def _process_word_foreign_data(self, df: pd.DataFrame, file_path: str, append_mode: bool = False) -> None:
         """
@@ -2352,58 +2323,17 @@ class MainWindow:
         logger.info(f"  Не найдено аналогов: {total_not_found}")
         logger.info("=" * 70)
         
-        # ========== ШАГ 3: Сохраняем данные ==========
-        new_df = pd.DataFrame(data_for_table)
+        # ========== ШАГ 3: ПОКАЗЫВАЕМ ДАННЫЕ В ДИАЛОГЕ (НЕ СОХРАНЯЕМ!) ==========
+        # Данные будут сохранены ТОЛЬКО при нажатии "Перенести в матрицу"
+        # ================================================================
         
-        if not new_df.empty:
-            new_df = new_df[new_df["Артикул LaggarTT"] != ""]
-            new_df = new_df[new_df["Артикул LaggarTT"].notna()]
-            new_df = new_df[new_df["Источник"] != "Не подобрано"]
-            logger.info(f"После фильтрации осталось {len(new_df)} строк (только с артикулами)")
-        
-        all_data_for_export = pd.DataFrame(data_for_table)
-        if not all_data_for_export.empty:
-            all_data_for_export = all_data_for_export[all_data_for_export["Артикул LaggarTT"] != ""]
-            all_data_for_export = all_data_for_export[all_data_for_export["Артикул LaggarTT"].notna()]
-        
-        if append_mode:
-            if hasattr(self.app, '_all_correspondence_data') and self.app._all_correspondence_data is not None:
-                old_df = self.app._all_correspondence_data.copy()
-                needed_cols = ['Наименование', 'Кол-во', 'Наименование LaggarTT', 'Артикул LaggarTT', 'Источник']
-                old_df = old_df[[c for c in needed_cols if c in old_df.columns]]
-                combined_df = pd.concat([old_df, new_df], ignore_index=True)
-                if not combined_df.empty:
-                    combined_df = combined_df[combined_df["Артикул LaggarTT"] != ""]
-                    combined_df = combined_df[combined_df["Артикул LaggarTT"].notna()]
-                    combined_df = combined_df[combined_df["Источник"] != "Не подобрано"]
-                logger.info(f"Данные PDF объединены: было {len(old_df)} + новых {len(new_df)} = {len(combined_df)} строк")
-            else:
-                combined_df = new_df.copy()
-            
-            if hasattr(self.app, '_all_correspondence_data_for_export') and self.app._all_correspondence_data_for_export is not None:
-                old_export = self.app._all_correspondence_data_for_export.copy()
-                combined_export = pd.concat([old_export, all_data_for_export], ignore_index=True)
-                self.app._all_correspondence_data_for_export = combined_export
-            else:
-                self.app._all_correspondence_data_for_export = all_data_for_export.copy()
-        else:
-            combined_df = new_df.copy()
-            self.app._all_correspondence_data_for_export = all_data_for_export.copy()
-            logger.info("Данные PDF заменены (append_mode=False)")
-        
-        self.app._all_correspondence_data = combined_df.copy()
-        self.app._last_correspondence_data = pd.DataFrame(data_for_table).copy()
-        
-        logger.info(f"DEBUG _all_correspondence_data сохранён: {combined_df.shape[0]} строк")
-        logger.info(f"DEBUG _all_correspondence_data_for_export сохранён: {self.app._all_correspondence_data_for_export.shape[0]} строк")
-        
-        if hasattr(self, '_edit_correspondence_btn'):
-            self._edit_correspondence_btn.config(state="normal")
-        
+        # Открываем диалог с данными
         from nextt.ui.dialogs.correspondence import CorrespondenceDialog
         dialog = CorrespondenceDialog(self.app)
         self.app._last_correspondence_dialog = dialog
         dialog.show(pd.DataFrame(data_for_table))
+        
+        logger.info(f"Данные показаны в диалоге ({len(data_for_table)} строк). Сохранение произойдет при нажатии 'Перенести в матрицу'")
 
     def _process_foreign_dataframe_direct(self, df: pd.DataFrame, append_mode: bool = False) -> None:
         """
