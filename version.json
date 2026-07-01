@@ -1,11 +1,11 @@
 {
-    "version": "2.4",
-    "version_code": 24,
-    "download_url": "https://b24.engpx.ru/~kMmVo",
-    "release_date": "2026-01-01",
-    "is_mandatory": false,
-    "whats_new": [
-        "В меню кнопки Информация добавлен Формуляр регистрации проектов"
-    ],
-    "min_supported_version": "2.0"
+  "version": "2.4",
+  "version_code": 24,
+  "download_url": "https://b24.engpx.ru/~kMmVo",
+  "release_date": "2026-07-01",
+  "is_mandatory": false,
+  "whats_new": [
+    "В меню кнопки Информация добавлен Формуляр регистрации проектов"
+  ],
+  "min_supported_version": "2.0"
 }
