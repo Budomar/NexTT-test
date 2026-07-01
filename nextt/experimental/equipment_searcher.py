@@ -2,22 +2,19 @@
 Поиск оборудования в базе Все_категории.xlsx.
 Использует EquipmentNormalizer для интеллектуального парсинга.
 """
-
 import re
 from typing import Optional, Dict, List
 from pathlib import Path
 import pandas as pd
-
 from nextt.logger import get_logger
 from nextt.config import get_resource_path
 from nextt.experimental.equipment_normalizer import EquipmentNormalizer
 
 logger = get_logger(__name__)
 
-
 class EquipmentSearcher:
     """Поиск оборудования по артикулу или ключевым словам."""
-
+    
     def __init__(self, data_provider=None, selected_categories=None):
         self.data_provider = data_provider
         self.selected_categories = selected_categories
@@ -28,7 +25,7 @@ class EquipmentSearcher:
         
         # Создаём нормализатор с отфильтрованной базой
         self.normalizer = EquipmentNormalizer(filtered_df, debug=True)
-    
+
     def _filter_by_categories(self, df: pd.DataFrame) -> pd.DataFrame:
         """Фильтрует DataFrame по выбранным категориям."""
         if self.selected_categories is None or len(self.selected_categories) == 0:
@@ -73,28 +70,19 @@ class EquipmentSearcher:
         result = text
         for dash in dash_patterns:
             result = result.replace(dash, '-')
-        
+         
         # Исправляем опечатки в "штука"
         result = result.replace('щтука', 'штука')
         result = result.replace('щтук', 'штук')
         
         # Нормализуем пробелы: убираем лишние
         result = re.sub(r'\s+', ' ', result)
-        
+         
         return result
 
     def extract_quantity(self, text: str) -> int:
         """
         Извлекает количество из текста.
-        Поддерживает:
-        - слово + дефис + число + штука: "Вайфай- 2 штуки"
-        - тире + число + шт: "– 17шт", "- 17 шт", "— 17 штук"
-        - число + шт: "17шт", "17 шт"
-        - число в конце строки: "17"
-        - число после "В наличии": "В наличии 2,000"
-        - число после "Нет в наличии": "Нет в наличии 0"
-        - сложные: "1+2", "2+3"
-        - число в начале строки: "2 шт Котел..."
         """
         if not text:
             return 0
@@ -127,7 +115,7 @@ class EquipmentSearcher:
                 pass
         
         # ========== ПАТТЕРН 3: тире + число + шт ==========
-        pattern3 = r'-\s*(\d+(?:[.,]\d+)?)\s*(?:шт\.?|штук[аи]?|штука)\b'
+        pattern3 = r'-\s*(\d+(?:[., ]\d+)?)\s*(?:шт\.?|штук[аи]?|штука)\b'
         match = re.search(pattern3, normalized, re.IGNORECASE)
         if match:
             try:
@@ -262,7 +250,7 @@ class EquipmentSearcher:
             article_col = None
             name_col = None
             price_col = None
-            
+             
             for col in df.columns:
                 col_str = str(col).lower().strip()
                 if col_str in ['артикул', 'article', 'art', 'код', 'code']:
@@ -291,7 +279,7 @@ class EquipmentSearcher:
             df['Артикул'] = df['Артикул'].astype(str).str.strip()
             df['Наименование'] = df['Наименование'].astype(str).str.strip()
             df = df.fillna('')
-            
+             
             df = df[df['Артикул'] != '']
             df = df[df['Артикул'] != 'nan']
             
@@ -377,6 +365,7 @@ class EquipmentSearcher:
             r'\b([A-Z]{2}\d{8})\b',
             r'\b(301\d{8})\b',
             r'\b(8755D\d{8})\b',
+            r'\b([A-Z]-\d+)\b',
             r'\b(\d{10,11})\b',
         ]
         
@@ -479,7 +468,7 @@ class EquipmentSearcher:
             qty = self.extract_quantity(qty_str)
             
             # Если количество не найдено, пробуем извлечь из названия
-            if qty == 0:
+            if qty == 0: 
                 qty = self.extract_quantity(name)
             
             results.append(self.match_line(name, qty))
@@ -498,16 +487,31 @@ class EquipmentSearcher:
         radiator = 0
         equipment = 0
         
+        # Индикаторы для самих радиаторов (требуют подбора аналогов)
+        radiator_indicators = ['k-profil', 'vk-profil', 'радиатор', '77246', '77247', '/300/', '/400/', '/500/']
+        
+        # Индикаторы для оборудования (котлы, бойлеры, дымоходы, фланцы и т.д.)
+        equipment_indicators = ['котел', 'котёл', 'бойлер', 'дымоход', 'газовый', 'газ 6000', 'кронштейн', 'фланец']
+        
+        # НОВЫЕ ИНДИКАТОРЫ: Комплектующие к радиаторам (решетки, клипсы и т.д.)
+        # Они должны классифицироваться как 'equipment', чтобы не запускать логику подбора аналогов радиаторов
+        accessory_indicators = [
+            'решетка', 'решётка', 'клипса', 'заглушка', 'кран воздушный', 'воздушный кран',
+            'переходник', 'адаптер', 'панель боковая', 'боковая панель', 'колпачок',
+            'регулятор', 'набор клипс', 'набор адаптеров'
+        ]
+        
         for i in range(min(10, len(df))):
             text = ' '.join(str(v) for v in df.iloc[i].values).lower()
             
-            radiator_indicators = ['k-profil', 'vk-profil', 'радиатор', '77246', '77247', '/300/', '/400/', '/500/']
-            equipment_indicators = ['котел', 'котёл', 'бойлер', 'дымоход', 'газовый', 'газ 6000', 'кронштейн']
-            
-            if any(i in text for i in radiator_indicators):
+            if any(ind in text for ind in radiator_indicators):
                 radiator += 1
-            elif any(i in text for i in equipment_indicators):
+            elif any(ind in text for ind in equipment_indicators):
                 equipment += 1
+            elif any(ind in text for ind in accessory_indicators):
+                # Комплектующие считаем оборудованием, так как они есть в базе
+                equipment += 1
+                logger.info(f"  Найдены признаки комплектующих в строке {i}")
         
         logger.info(f"Определение типа: radiator={radiator}, equipment={equipment}")
         

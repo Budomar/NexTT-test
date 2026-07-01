@@ -25,8 +25,8 @@ logger = get_logger(__name__)
 VERSION_URL = "https://raw.githubusercontent.com/e-laggartt/NexTT/main/version.json"
 
 # Текущая версия программы
-CURRENT_VERSION = "2.2"
-CURRENT_VERSION_CODE = 22
+CURRENT_VERSION = "2.3"
+CURRENT_VERSION_CODE = 23
 
 # Путь к иконке (относительно корня проекта)
 ICON_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "resources", "icon.ico")

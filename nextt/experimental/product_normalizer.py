@@ -1,25 +1,22 @@
 """
 product_normalizer.py - Извлечение параметров товара из текста
 Универсальный парсер для любых форматов названий.
-Версия 8.1 - исправлен вес Wi-Fi в поиске
+Версия 8.2 - добавлена поддержка комплектующих к радиаторам (решетки, клипсы, панели)
+и исправлено определение "фланец" как дымохода.
 """
-
 import re
 from typing import Dict, Optional, Tuple, List
 from dataclasses import dataclass, field
-
 from nextt.logger import get_logger
 
 logger = get_logger(__name__)
-
 
 @dataclass
 class ProductParams:
     """Структурированные параметры товара."""
     # Основные
-    product_type: str = ""  # котел, бойлер, дымоход, комплект, датчик, радиатор, кронштейн
+    product_type: str = ""  # котел, бойлер, дымоход, комплект, датчик, радиатор, кронштейн, radiator_accessory
     brand: str = ""         # laggartt, meteor, devotion
-    
     # Для котлов
     model: str = ""         # B30, C11, M30, T2, Q3, GAZ6000
     model_suffix: str = ""  # RN, A, M, T, Q, H, C и т.д. (модификация модели)
@@ -27,32 +24,38 @@ class ProductParams:
     conn_type: str = ""     # C, H
     has_wifi: bool = False
     has_ot: bool = False
-    
+
     # Для дымоходов
     size: str = ""          # DN60/100, DN80/125
     article_code: str = ""  # WT60100-01LN
     is_condensing: bool = False  # True если для конденсационного котла (есть PP или LN)
-    
+
     # Для бойлеров
     volume: Optional[int] = None  # 150, 200, 300
-    
+
     # Для комплектов
     kit_type: str = ""      # сжиженный газ, перенастройка
-    
+
     # Для радиаторов
     radiator_type: str = ""  # 10, 11, 20, 21, 22, 30, 33
     height: Optional[int] = None
     length: Optional[int] = None
     connection: str = ""     # VK, K
-    
+
     # Для кронштейнов
     bracket_article: str = ""
-    
+
+    # Для комплектующих к радиаторам (НОВОЕ)
+    accessory_type: str = ""        # решетка, панель, клипса, заглушка, кран, колпачок, регулятор, адаптер
+    accessory_subtype: str = ""     # короткая/длинная (для клипс)
+    accessory_brand: str = ""       # laggartt, meteor (для клипс)
+    types_list: List[str] = field(default_factory=list)  # список типов для решёток/панелей ["10", "11", "21"]
+
     # Общее
     article: str = ""
     confidence: float = 0.0
     original_text: str = ""
-    
+
     def to_key(self) -> tuple:
         """Возвращает ключ для индексации (только значимые параметры)."""
         if self.product_type == 'boiler':
@@ -65,9 +68,13 @@ class ProductParams:
             return ('radiator', self.radiator_type, self.height, self.length, self.connection)
         elif self.product_type == 'bracket':
             return ('bracket', self.bracket_article)
+        elif self.product_type == 'radiator_accessory':
+            return ('radiator_accessory', self.accessory_type, 
+                    tuple(sorted(self.types_list)) if self.types_list else (),
+                    self.height, self.length, self.accessory_brand, self.accessory_subtype)
         else:
             return (self.product_type, self.brand, self.model, self.model_suffix, self.power, self.has_wifi)
-    
+
     def matches_params(self, other: 'ProductParams') -> float:
         """
         Сравнивает два набора параметров.
@@ -213,6 +220,50 @@ class ProductParams:
                 if self.bracket_article == other.bracket_article:
                     score += 0.30
         
+        # ========== ДЛЯ КОМПЛЕКТУЮЩИХ К РАДИАТОРАМ (НОВОЕ) ==========
+        if self.product_type == 'radiator_accessory' and other.product_type == 'radiator_accessory':
+            # Тип комплектующего (решетка/панель/клипса и т.д.)
+            if self.accessory_type and other.accessory_type:
+                max_score += 0.25
+                if self.accessory_type == other.accessory_type:
+                    score += 0.25
+            
+            # Список типов (для решёток и панелей)
+            if self.types_list and other.types_list:
+                max_score += 0.20
+                # Сравниваем как множества (порядок не важен)
+                if set(self.types_list) == set(other.types_list):
+                    score += 0.20
+                elif set(self.types_list) & set(other.types_list):
+                    # Частичное совпадение
+                    intersection = len(set(self.types_list) & set(other.types_list))
+                    union = len(set(self.types_list) | set(other.types_list))
+                    score += 0.20 * (intersection / union) if union > 0 else 0
+            
+            # Длина (для решёток)
+            if self.length and other.length:
+                max_score += 0.20
+                if self.length == other.length:
+                    score += 0.20
+            
+            # Высота (для панелей)
+            if self.height and other.height:
+                max_score += 0.20
+                if self.height == other.height:
+                    score += 0.20
+            
+            # Бренд клипсы
+            if self.accessory_brand and other.accessory_brand:
+                max_score += 0.15
+                if self.accessory_brand == other.accessory_brand:
+                    score += 0.15
+            
+            # Подтип (короткая/длинная)
+            if self.accessory_subtype and other.accessory_subtype:
+                max_score += 0.15
+                if self.accessory_subtype == other.accessory_subtype:
+                    score += 0.15
+        
         if max_score == 0:
             return 0.0
         
@@ -238,7 +289,7 @@ class ProductNormalizer:
         'Ш': 'Sh', 'ш': 'sh', 'Щ': 'Shh', 'щ': 'shh', 'Ъ': '', 'ъ': '',
         'Э': 'E', 'э': 'e',
     }
-    
+
     # Паттерны для извлечения мощности
     POWER_PATTERNS = [
         r'(\d{2})\s*квт',
@@ -246,7 +297,7 @@ class ProductNormalizer:
         r'мощность\s*(\d{2})',
         r'\b(10|12|14|18|20|24|26|28|30|32|35|36|45|60|80)\b',
     ]
-    
+
     # Паттерны для моделей котлов (общие, без жёсткой привязки к конкретным)
     MODEL_PATTERNS = [
         # Буква + 2 цифры, возможно с суффиксом (B30, B30RN, C11, M30A, T2, Q3)
@@ -258,13 +309,13 @@ class ProductNormalizer:
         # T2, Q3 (буква + одна цифра)
         r'\b([TQ])([0-9]{1})([A-Z]{1,3})?\b',
     ]
-    
+
     # Допустимые суффиксы для котлов (в порядке приоритета)
     VALID_SUFFIXES = {'RN', 'A', 'M', 'T', 'Q', 'H', 'C', 'RNW', 'RNM', 'RNH', 'RNC', 'LA', 'RA', 'RE', 'LE'}
-    
+
     def __init__(self):
         pass
-    
+
     def _log(self, message: str, level: str = "INFO") -> None:
         if level == "ERROR":
             logger.error(f"[ProductNormalizer] {message}")
@@ -272,7 +323,7 @@ class ProductNormalizer:
             logger.warning(f"[ProductNormalizer] {message}")
         else:
             logger.info(f"[ProductNormalizer] {message}")
-    
+
     def _normalize(self, text: str) -> str:
         """Нормализует текст: русские буквы -> латинские, НЕ меняет регистр."""
         if not text:
@@ -281,11 +332,11 @@ class ProductNormalizer:
         for ch in text:
             result.append(self.LETTER_MAPPING.get(ch, ch))
         return ''.join(result)
-    
+
     def _normalize_lower(self, text: str) -> str:
         """Нормализует текст и приводит к нижнему регистру."""
         return self._normalize(text).lower()
-    
+
     def _extract_suffix_from_text(self, text: str, model_base: str, start_pos: int) -> str:
         """
         Универсальное извлечение суффикса из текста после модели.
@@ -317,7 +368,7 @@ class ProductNormalizer:
                     return suffix
         
         return ""
-    
+
     def extract(self, text: str) -> ProductParams:
         """
         Главный метод: извлекает параметры из любого текста.
@@ -348,7 +399,7 @@ class ProductNormalizer:
         if params.product_type == 'boiler':
             self._extract_boiler_params(params, text, text_upper, text_normalized, text_normalized_lower)
         
-        # 5. Для дымоходов
+        # 5. Для дымоходов (включая фланцы)
         elif params.product_type == 'chimney':
             self._extract_chimney_params(params, text_upper)
         
@@ -364,11 +415,15 @@ class ProductNormalizer:
         elif params.product_type == 'radiator':
             self._extract_radiator_params(params, text)
         
-        # 9. Для кронштейнов
+        # 9. Для кронштейнов 
         elif params.product_type == 'bracket':
             self._extract_bracket_params(params, text_upper)
         
-        # 10. Для датчиков и запчастей - уже есть артикул
+        # 10. Для комплектующих к радиаторам (НОВОЕ)
+        elif params.product_type == 'radiator_accessory':
+            self._extract_radiator_accessory_params(params, text)
+        
+        # 11. Для датчиков и запчастей - уже есть артикул
         elif params.product_type in ['sensor', 'part']:
             # Если артикул не найден, пробуем извлечь
             if not params.article:
@@ -378,10 +433,32 @@ class ProductNormalizer:
                     self._log(f"    Найден артикул для запчасти: {params.article}")
         
         return params
-    
+
     def _extract_product_type(self, text: str) -> str:
         """Определяет тип товара по ключевым словам или паттернам."""
         text_lower = text.lower()
+        
+        # ========== КОМПЛЕКТУЮЩИЕ К РАДИАТОРАМ (НОВОЕ, ПРОВЕРЯЕМ ПЕРВЫМИ) ==========
+        if any(x in text_lower for x in ['решетка', 'решётка', 'защитная решетка']):
+            return 'radiator_accessory'
+        if any(x in text_lower for x in ['боковая панель', 'панель боковая']):
+            return 'radiator_accessory'
+        if any(x in text_lower for x in ['клипса']) and any(x in text_lower for x in ['laggartt', 'meteor', 'бренд']):
+            return 'radiator_accessory'
+        if any(x in text_lower for x in ['заглушка']) and any(x in text_lower for x in ['латунная', 'декоративная', 'панели']):
+            return 'radiator_accessory'
+        if any(x in text_lower for x in ['воздушный кран', 'кран воздушный']):
+            return 'radiator_accessory'
+        if any(x in text_lower for x in ['колпачок', 'регулятор']) and 'af' in text_lower:
+            return 'radiator_accessory'
+        if 'адаптер' in text_lower and 'решётк' in text_lower:
+            return 'radiator_accessory'
+        if 'набор' in text_lower and any(x in text_lower for x in ['клипс', 'адаптер']):
+            return 'radiator_accessory'
+        
+        # ========== ФЛАНЕЦ = ДЫМОХОД (НОВОЕ) ==========
+        if 'фланец' in text_lower:
+            return 'chimney'
         
         if any(x in text_lower for x in ['котел', 'котёл']):
             return 'boiler'
@@ -414,7 +491,7 @@ class ProductNormalizer:
             return 'bracket'
         
         return 'other'
-    
+
     def _extract_brand(self, text: str) -> str:
         """Извлекает бренд."""
         text_lower = text.lower()
@@ -425,7 +502,7 @@ class ProductNormalizer:
         if 'devotion' in text_lower:
             return 'devotion'
         return ''
-    
+
     def _extract_boiler_params(self, params: ProductParams, text: str, text_upper: str, 
                                 text_normalized: str, text_normalized_lower: str):
         """
@@ -450,7 +527,7 @@ class ProductNormalizer:
             patterns = [
                 r'(\d*)\s*([CH])\s+([A-Z]{1,3})\b',   # 24 C RN
                 r'(\d*)([CH])\s+([A-Z]{1,3})\b',      # 24C RN
-                r'(\d*)([A-Z]{1,3})\b',               # 24RN
+                r'(\d*)([A-Z]{1,3})\b',                # 24RN
             ]
             
             for pattern in patterns:
@@ -538,10 +615,18 @@ class ProductNormalizer:
                     params.conn_type = 'H'
         
         self._log(f"    ИТОГО: модель={params.model}, суффикс={params.model_suffix}, мощность={params.power}, тип={params.conn_type}, wifi={params.has_wifi}")
-    
+
     def _extract_chimney_params(self, params: ProductParams, text_upper: str):
         """Извлекает параметры дымохода."""
         self._log(f"    [ОТЛАДКА] Начало обработки дымохода. Текст: '{text_upper[:100]}'")
+        
+        # ========== ФЛАНЕЦ - ОСОБАЯ ОБРАБОТКА ==========
+        if 'ФЛАНЕЦ' in text_upper:
+            # Фланец - это всегда дымоход, но у него нет размера DN
+            # Просто помечаем, что это фланец, и не ищем размер
+            self._log(f"    [ОТЛАДКА] Обнаружен фланец - не ищем размер DN")
+            self._log(f"    [ОТЛАДКА] ИТОГО: size=, article=, condensing=False (фланец)")
+            return
         
         # Конденсационный тип
         condensing_keywords = ['РР', 'PP', 'LN', 'ПП', 'полипропилен', 'конденсационный']
@@ -603,10 +688,19 @@ class ProductNormalizer:
 
     def _extract_water_heater_params(self, params: ProductParams, text: str):
         """Извлекает параметры бойлера."""
+        # Формат: "IHT G 150"
         volume_match = re.search(r'IHT G (\d{3})', text, re.IGNORECASE)
         if volume_match:
             params.volume = int(volume_match.group(1))
-    
+            return
+        
+        # Альтернативный формат: "Бойлер 300"
+        volume_match = re.search(r'[Бб]ойлер\s+(\d{3})', text)
+        if volume_match:
+            params.volume = int(volume_match.group(1))
+            self._log(f"    Найден объём бойлера (альтернативный формат): {params.volume}")
+            return
+
     def _extract_conversion_kit_params(self, params: ProductParams, text: str):
         """Извлекает параметры комплекта перенастройки."""
         text_lower = text.lower()
@@ -619,7 +713,7 @@ class ProductNormalizer:
             params.power = 32
         else:
             params.power = 32
-    
+
     def _extract_radiator_params(self, params: ProductParams, text: str):
         """Извлекает параметры радиатора."""
         patterns = [
@@ -639,7 +733,7 @@ class ProductNormalizer:
             params.connection = 'VK'
         elif 'k-profil' in text_lower or 'боков' in text_lower:
             params.connection = 'K'
-    
+
     def _extract_bracket_params(self, params: ProductParams, text_upper: str):
         """Извлекает параметры кронштейна."""
         bracket_patterns = [
@@ -652,3 +746,75 @@ class ProductNormalizer:
             if match:
                 params.bracket_article = match.group(1)
                 break
+
+    # ========== НОВЫЙ МЕТОД: ИЗВЛЕЧЕНИЕ ПАРАМЕТРОВ КОМПЛЕКТУЮЩИХ К РАДИАТОРАМ ==========
+    def _extract_radiator_accessory_params(self, params: ProductParams, text: str):
+        """
+        Извлекает параметры комплектующих к радиаторам:
+        - решётки: тип (10/11/21, 20/22, 30/33) и длина
+        - панели: тип и высота
+        - клипсы: бренд и размер (короткая/длинная)
+        - заглушки, краны, колпачки, регуляторы, адаптеры
+        """
+        text_lower = text.lower()
+        
+        # ========== ОПРЕДЕЛЯЕМ ТИП КОМПЛЕКТУЮЩЕГО ==========
+        if any(x in text_lower for x in ['решетка', 'решётка']):
+            params.accessory_type = 'решетка'
+        elif any(x in text_lower for x in ['боковая панель', 'панель боковая']):
+            params.accessory_type = 'панель'
+        elif 'клипса' in text_lower:
+            params.accessory_type = 'клипса'
+        elif 'заглушка' in text_lower:
+            params.accessory_type = 'заглушка'
+        elif any(x in text_lower for x in ['воздушный кран', 'кран воздушный']):
+            params.accessory_type = 'кран'
+        elif 'колпачок' in text_lower:
+            params.accessory_type = 'колпачок'
+        elif 'регулятор' in text_lower:
+            params.accessory_type = 'регулятор'
+        elif 'адаптер' in text_lower:
+            params.accessory_type = 'адаптер'
+        else:
+            params.accessory_type = 'другое'
+        
+        # ========== ИЗВЛЕКАЕМ СПИСОК ТИПОВ (для решёток и панелей) ==========
+        if params.accessory_type in ['решетка', 'панель']:
+            # Ищем паттерн "тип 10, 11, 21" или "тип 20, 22" или "тип 30, 33"
+            types_match = re.search(r'тип\s+([\d\s,]+)', text_lower)
+            if types_match:
+                types_str = types_match.group(1)
+                # Извлекаем все числа
+                types = re.findall(r'\d+', types_str)
+                params.types_list = types
+                self._log(f"    Найдены типы: {params.types_list}")
+        
+        # ========== ИЗВЛЕКАЕМ ДЛИНУ (для решёток) ==========
+        if params.accessory_type == 'решетка':
+            length_match = re.search(r'длина\s+(\d+)', text_lower)
+            if length_match:
+                params.length = int(length_match.group(1))
+                self._log(f"    Найдена длина: {params.length}")
+        
+        # ========== ИЗВЛЕКАЕМ ВЫСОТУ (для панелей) ==========
+        if params.accessory_type == 'панель':
+            height_match = re.search(r'высота\s+(\d+)', text_lower)
+            if height_match:
+                params.height = int(height_match.group(1))
+                self._log(f"    Найдена высота: {params.height}")
+        
+        # ========== ИЗВЛЕКАЕМ БРЕНД И ПОДТИП (для клипс) ==========
+        if params.accessory_type == 'клипса':
+            # Бренд
+            if 'laggartt' in text_lower or 'laggar' in text_lower or 'бренд' in text_lower:
+                params.accessory_brand = 'laggartt'
+            elif 'meteor' in text_lower:
+                params.accessory_brand = 'meteor'
+            
+            # Подтип (короткая/длинная)
+            if 'коротк' in text_lower:
+                params.accessory_subtype = 'короткая'
+            elif 'длинн' in text_lower:
+                params.accessory_subtype = 'длинная'
+            
+            self._log(f"    Клипса: бренд={params.accessory_brand}, подтип={params.accessory_subtype}")

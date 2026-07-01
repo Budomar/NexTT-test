@@ -1,20 +1,17 @@
 """
-equipment_normalizer.py - Версия 6.0
+equipment_normalizer.py - Версия 6.1
 Универсальный поиск по параметрам с поддержкой суффиксов RN и приоритетом бренда LaggarTT.
+Добавлена поддержка артикулов бойлеров (7U..., 7I...) и фланцев (B-01).
 """
-
 import re
 from typing import Dict, Optional, Tuple, List, Any
 from dataclasses import dataclass, field
 import difflib
-
 import pandas as pd
-
 from ..logger import get_logger
 from .product_normalizer import ProductNormalizer, ProductParams
 
 logger = get_logger(__name__)
-
 
 @dataclass
 class ParsedEquipment:
@@ -38,11 +35,10 @@ class ParsedEquipment:
     has_wifi: bool = False
     has_ot: bool = False
 
-
 class EquipmentNormalizer:
     """
     УНИВЕРСАЛЬНЫЙ НОРМАЛИЗАТОР для названий оборудования.
-    Версия 6.0: поиск по структурированным параметрам с приоритетом бренда.
+    Версия 6.1: поиск по структурированным параметрам с приоритетом бренда.
     """
     
     def __init__(self, equipment_df=None, debug: bool = True):
@@ -55,7 +51,7 @@ class EquipmentNormalizer:
         self._params_index: List[Tuple[ProductParams, str]] = []  # (параметры, артикул)
         
         self._build_indices()
-    
+
     def _log(self, message: str, level: str = "INFO") -> None:
         if self.debug:
             if level == "ERROR":
@@ -64,14 +60,14 @@ class EquipmentNormalizer:
                 logger.warning(f"[EquipmentNormalizer] {message}")
             else:
                 logger.info(f"[EquipmentNormalizer] {message}")
-    
+
     def _get_model_base(self, model: str) -> str:
         """Получает базовую модель без суффиксов."""
         if not model:
             return ''
         base = re.sub(r'[RNAMTQBCXYZ]+$', '', model.upper())
         return base
-    
+
     def _extract_boiler_params_for_index(self, text: str) -> ProductParams:
         """
         Извлекает параметры котла из названия для индексации.
@@ -82,7 +78,7 @@ class EquipmentNormalizer:
         text_upper = text.upper()
         text_normalized = self.product_normalizer._normalize(text)
         
-        # Определяем тип и бренд
+        # Определяем тип и бренд 
         params.product_type = 'boiler'
         params.brand = self.product_normalizer._extract_brand(text)
         
@@ -101,7 +97,7 @@ class EquipmentNormalizer:
             patterns = [
                 r'(\d*)\s*([CH])\s+([A-Z]{1,3})\b',   # 24 C RN
                 r'(\d*)([CH])\s+([A-Z]{1,3})\b',      # 24C RN
-                r'(\d*)([A-Z]{1,3})\b',               # 24RN
+                r'(\d*)([A-Z]{1,3})\b',                # 24RN
             ]
             
             for pattern in patterns:
@@ -166,7 +162,7 @@ class EquipmentNormalizer:
         self._log(f"    ИТОГО: модель={params.model}, суффикс={params.model_suffix}, мощность={params.power}, тип={params.conn_type}")
         
         return params
-    
+
     def _build_indices(self) -> None:
         """Строит индекс параметров из базы данных с учётом суффиксов."""
         if self.equipment_df is None or self.equipment_df.empty:
@@ -206,7 +202,7 @@ class EquipmentNormalizer:
         # ========== ДОПОЛНИТЕЛЬНАЯ ОТЛАДКА: список артикулов AC ==========
         ac_articles = [a for a in self._article_index.keys() if a.startswith('AC')]
         self._log(f"    [ОТЛАДКА] Артикулы AC в индексе: {ac_articles}")
-    
+
     def _search_by_params(self, query_params: ProductParams) -> Optional[Tuple[str, str, float]]:
         """
         Поиск по параметрам с учётом суффиксов и типа подключения.
@@ -278,7 +274,7 @@ class EquipmentNormalizer:
             return (best_article, best_name, best_score)
         
         return None
-    
+
     def _search_by_fuzzy(self, text: str) -> Optional[Tuple[str, str, float]]:
         """Запасной поиск: нечёткое сравнение строк."""
         if not self._params_index:
@@ -306,7 +302,7 @@ class EquipmentNormalizer:
                 return (article, name, confidence)
         
         return None
-    
+
     def normalize_and_extract(self, text: str) -> ParsedEquipment:
         """Основной метод поиска."""
         result = ParsedEquipment()
@@ -318,7 +314,9 @@ class EquipmentNormalizer:
         # Ищем артикул в тексте
         article_patterns = [
             r'\b([A-Z]{2}\d{8})\b',   # AC02000024, AA04010164
+            r'\b(7[A-Z]\d{9})\b',     # 7U121011001, 7I121011001 (бойлеры)
             r'\b(\d{10,11})\b',        # 87323019330
+            r'\b([A-Z]-\d+)\b',        # B-01 (фланцы)
             r'\b([КK]\d{1,2}\.\d{1,4}[A-Z]?\d*)\b',  # Кронштейны
         ]
         for pattern in article_patterns:
@@ -371,7 +369,7 @@ class EquipmentNormalizer:
         
         self._log(f"    ❌ НЕ НАЙДЕНО")
         return result
-    
+
     def match_line(self, text: str, quantity: Optional[int] = None) -> Dict:
         """Обрабатывает одну строку."""
         result = {

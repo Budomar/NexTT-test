@@ -277,7 +277,8 @@ class MainWindow:
         info_menu.add_separator()
         info_menu.add_command(label="Паспорт на радиатор", command=self._on_passport)
         info_menu.add_command(label="Сертификат соответствия", command=self._on_certificate)
-        info_menu.add_command(label="Гигиенический сертификат", command=lambda: webbrowser.open("https://b24.engpx.ru/~IPOCe"))  
+        info_menu.add_command(label="Гигиенический сертификат", command=lambda: webbrowser.open("https://b24.engpx.ru/~IPOCe"))
+        info_menu.add_command(label="Формуляр для регистрации проектов", command=self._formulyar)  
         info_menu.add_separator()
         info_menu.add_command(label="BIM-модели радиаторов", command=lambda: webbrowser.open("https://b24.engpx.ru/~QQD8Z"))  
         info_btn["menu"] = info_menu
@@ -3213,6 +3214,16 @@ class MainWindow:
     def _on_price_list(self) -> None:
         try:
             path = get_resource_path("Прайс-лист.xlsx")
+            if os.path.exists(path):
+                os.startfile(path)
+            else:
+                messagebox.showerror("Ошибка", "Файл не найден")
+        except Exception as e:
+            messagebox.showerror("Ошибка", str(e))
+
+    def _formulyar(self) -> None:
+        try:
+            path = get_resource_path("Формуляр для регистрации проектов.xlsm")
             if os.path.exists(path):
                 os.startfile(path)
             else:

@@ -1,2 +1,65 @@
 {
+  "версия": "1.0",
+  "шаблоны": [
+    {
+      "id": "template_001",
+      "name": "VK-PROF-22-300-700...",
+      "original_example": "VK-PROF-22-300-700",
+      "mask": "VK-PROF-{type}-{height}-{length}",
+      "connection": "VK-правое",
+      "type_transform": {},
+      "height_transform": "direct",
+      "length_transform": "direct",
+      "priority": 95,
+      "created_at": "2026-07-01T08:32:21.796982"
+    },
+    {
+      "id": "template_003",
+      "name": "22CV-300-1100...",
+      "original_example": "22CV-300-1100",
+      "mask": "{type}CV-{height}-{length}",
+      "connection": "VK-правое",
+      "type_transform": {},
+      "height_transform": "direct",
+      "length_transform": "direct",
+      "priority": 95,
+      "created_at": "2026-07-01T08:32:21.796991"
+    },
+    {
+      "id": "template_004",
+      "name": "11C-300-800 L...",
+      "original_example": "11C-300-800 L",
+      "mask": "{type}C-{height}-{length} L",
+      "connection": "K-боковое",
+      "type_transform": {},
+      "height_transform": "direct",
+      "length_transform": "direct",
+      "priority": 95,
+      "created_at": "2026-07-01T08:32:21.796993"
+    },
+    {
+      "id": "template_005",
+      "name": "22C-300-800L...",
+      "original_example": "22C-300-800L",
+      "mask": "{type}C-{height}-{length}L",
+      "connection": "K-боковое",
+      "type_transform": {},
+      "height_transform": "direct",
+      "length_transform": "direct",
+      "priority": 95,
+      "created_at": "2026-07-01T08:32:21.796994"
+    },
+    {
+      "id": "template_007",
+      "name": "11C-300-500...",
+      "original_example": "11C-300-500",
+      "mask": "{type}C-{height}-{length}",
+      "connection": "K-боковое",
+      "type_transform": {},
+      "height_transform": "direct",
+      "length_transform": "direct",
+      "priority": 95,
+      "created_at": "2026-07-01T08:32:21.796998"
+    }
+  ]
 }

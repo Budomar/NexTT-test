@@ -2,23 +2,25 @@
 Универсальный парсер для данных из буфера обмена.
 Извлекает: артикул, количество, нормализованное название.
 """
-
 import re
 from typing import Tuple, Optional
-
 
 class UniversalParser:
     """Универсальный парсер для вставки из буфера."""
     
+    # Слова, после которых число является параметром, а не количеством
+    PARAM_WORDS = ['длина', 'высота', 'ширина', 'тип', 'диаметр', 'мощность', 
+                   'объем', 'вес', 'глубина', 'толщина', 'размер', 'длин', 'высот']
+
     # Паттерны для извлечения артикулов (в порядке приоритета)
     ARTICLE_PATTERNS = [
         # LaggarTT/Meteor радиаторы: 7724655312, 7724755312
         (r'\b(7724[67]\d{6})\b', 1),
-        # Котлы Meteor: 10680203003, 10680503011, 10680725001
+        # Котлы  Meteor: 10680203003, 10680503011, 10680725001
         (r'\b(1068\d{7})\b', 2),
         # Котлы ГАЗ 6000: 8732306494, 8732302142
         (r'\b(8732\d{6})\b', 3),
-        # Бойлеры: 7I121011001, 7L121011003, 7U121011001
+        # Бойлеры: 7I121011001, 7L 121011003, 7U121011001
         (r'\b(7[A-Z]\d{9})\b', 4),
         # Кронштейны: К15.4300, К9.2L, КНС470, К31.35, PLN20
         (r'\b([КK]\d{1,2}\.\d{1,2}[A-Z]?\d*)\b', 5),
@@ -31,34 +33,34 @@ class UniversalParser:
         (r'\b([A-Z]-\d+)\b', 8),
         # Датчики: AC01000061, BB99000142
         (r'\b([A-Z]{2}\d{8})\b', 9),
-        # Комплекты перенастройки: 30100000002, 30100000001
+        # Комплекты перенастройки: 30100000002, 30100000001 
         (r'\b(301\d{8})\b', 10),
         # Защитные решетки: 8755D70101
         (r'\b(8755D\d{8})\b', 11),
         # Любые 10-11 цифр (запасной вариант)
         (r'\b(\d{10,11})\b', 12),
     ]
-    
+
     # Паттерны для извлечения количества (в порядке приоритета)
     QUANTITY_PATTERNS = [
-        # "- 3 шт", "— 5 штук", "- 64 ШТ."
+        #  "- 3 шт ",  "— 5 штук ",  "- 64 ШТ. "
         r'[–\-]\s*(\d+)\s*шт',
-        # "= 4 шт", "= 1 шт."
+        #  "= 4 шт ",  "= 1 шт. "
         r'=\s*(\d+)\s*шт',
-        # "2 штуки", "1 штук", "5 штук"
+        #  "2 штуки ",  "1 штук ",  "5 штук "
         r'(\d+)\s*шт\w*',
-        # "3 шт.", "10 шт"
+        #  "3 шт. ",  "10 шт "
         r'(\d+)\s*шт\.?',
-        # "x 10", "х 5"
+        #  "x 10 ",  "х 5 "
         r'[xх]\s*(\d+)',
-        # "— 64" (число после тире в конце строки)
+        #  "— 64 " (число после тире в конце строки)
         r'[–\-]\s*(\d+)\s*$',
         # просто число в конце строки
         r'(\d+)\s*$',
         # число в начале строки (редко)
         r'^(\d+)\s+',
     ]
-    
+
     @classmethod
     def parse_line(cls, text: str) -> Tuple[Optional[str], int, str]:
         """
@@ -82,7 +84,7 @@ class UniversalParser:
         clean_name = cls._clean_name(text_clean, article, quantity)
         
         return article, quantity, clean_name
-    
+
     @classmethod
     def _extract_article(cls, text: str) -> Optional[str]:
         """Извлекает артикул из текста."""
@@ -91,7 +93,25 @@ class UniversalParser:
             if match:
                 return match.group(1).strip()
         return None
-    
+
+    @classmethod
+    def _is_parameter_number(cls, text: str, match_start: int) -> bool:
+        """
+        Проверяет, является ли число параметром (длиной, типом и т.д.), 
+        а не количеством.
+        """
+        # Берем контекст перед числом (последние 30 символов)
+        prefix = text[:match_start].lower()
+        # Ищем слова-параметры в конце префикса
+        for word in cls.PARAM_WORDS:
+            if word in prefix:
+                # Проверяем, что слово находится близко к числу (не в начале длинного предложения)
+                # Это простая эвристика: если слово есть в последних 30 символах перед числом
+                last_occurrence = prefix.rfind(word)
+                if last_occurrence != -1 and (len(prefix) - last_occurrence) < 30:
+                    return True
+        return False
+
     @classmethod
     def _extract_quantity(cls, text: str) -> int:
         """Извлекает количество из текста."""
@@ -101,11 +121,16 @@ class UniversalParser:
                 try:
                     qty = int(match.group(1))
                     if qty > 0 and qty < 10000:
+                        # Если это паттерн "число в конце" или "число в начале", 
+                        # проверяем, не является ли оно параметром
+                        if pattern in [r'(\d+)\s*$', r'^(\d+)\s+', r'[–\-]\s*(\d+)\s*$']:
+                            if cls._is_parameter_number(text, match.start()):
+                                continue # Пропускаем, это параметр (длина, тип и т.д.)
                         return qty
                 except:
                     pass
         return 0
-    
+
     @classmethod
     def _clean_name(cls, text: str, article: Optional[str], quantity: int) -> str:
         """
@@ -116,7 +141,7 @@ class UniversalParser:
         # Удаляем артикул (в скобках или без)
         if article:
             # Удаляем артикул в скобках
-            result = re.sub(r'\(' + re.escape(article) + r'\)', '', result)
+            result = re.sub(r'\(' + re.escape(article) + r'\)', ' ', result)
             # Удаляем артикул без скобок как отдельное слово
             result = re.sub(r'\b' + re.escape(article) + r'\b', '', result)
         
@@ -132,6 +157,10 @@ class UniversalParser:
                 r'^\s*' + str(quantity) + r'\s+',
             ]
             for pattern in patterns:
+                # Перед удалением проверяем, не является ли это число параметром
+                # (Например, если quantity случайно определилось как 800, но это длина)
+                # Но так как мы уже отфильтровали параметры в _extract_quantity,
+                # здесь quantity точно является количеством.
                 result = re.sub(pattern, '', result, flags=re.IGNORECASE)
         
         # Удаляем лишние пробелы и знаки
@@ -139,7 +168,7 @@ class UniversalParser:
         result = result.strip(' ()-–=,;:')
         
         return result
-    
+
     @classmethod
     def parse_dataframe(cls, df) -> list:
         """
