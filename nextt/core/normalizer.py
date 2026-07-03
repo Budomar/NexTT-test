@@ -82,172 +82,170 @@ class SpecNormalizer:
         self._load_builtin_strategies()  # ПОТОМ встроенные
     
     def _load_builtin_strategies(self):
-        """Загружает встроенные стратегии (включая стратегии из шаблонов)."""
         builtin = [
+            ("evra_format", self._parse_evra_format, 0.98),
             ("oasis", self._parse_oasis, 0.95),
-            ("arbonia_ftv", self._parse_arbonia_ftv, 0.92),
             ("coded_triplet", self._parse_coded_triplet, 0.95),
+            ("laggar", self._parse_laggar_format, 0.95),
+            ("arbonia_ftv", self._parse_arbonia_ftv, 0.92),
+            ("kermi", self._parse_kermi, 0.92),
             ("lidea", self._parse_lidea, 0.90),
             ("evra", self._parse_evra, 0.90),
-            ("rostorm", self._parse_rostorm, 0.85),
-            ("kermi", self._parse_kermi, 0.92),
-            ("laggar", self._parse_laggar_format, 0.95),
             ("compact_prefix", self._parse_compact_with_prefix, 0.90),
-            ("text_with_type", self._parse_text_with_type, 0.80),
+            ("rostorm", self._parse_rostorm, 0.85),
             ("universal_triplet", self._parse_universal_triplet, 0.85),
             ("compact_triplet", self._parse_compact_triplet, 0.85),
+            ("text_with_type", self._parse_text_with_type, 0.80),
             ("height_length", self._parse_height_length_only, 0.65),
-            
-            # ================================================================
-            # СТРАТЕГИИ ИЗ ШАБЛОНОВ (МИГРИРОВАНЫ ИЗ templates.json)
-            # ================================================================
-            ("template_001", self._parse_template_001, 0.95),
-            ("template_002", self._parse_template_002, 0.95),
-            ("template_003", self._parse_template_003, 0.95),
-            ("template_004", self._parse_template_004, 0.95),
-            ("template_005", self._parse_template_005, 0.95),
-            ("template_006", self._parse_template_006, 0.95),
-            ("template_007", self._parse_template_007, 0.95),
-            ("template_008", self._parse_template_008, 0.95),
-            ("template_009", self._parse_template_009, 0.95),
-            ("template_010", self._parse_template_010, 0.95),
-            ("template_011", self._parse_template_011, 0.95),
-            ("template_012", self._parse_template_012, 0.95),
-            ("template_013", self._parse_template_013, 0.95),
-            ("template_014", self._parse_template_014, 0.95),
-            ("template_015", self._parse_template_015, 0.95),
-            ("template_016", self._parse_template_016, 0.95),
         ]
         
-        self._strategies.extend(builtin)
-        # Сортируем по приоритету (убывание)
+        self._strategies.extend(builtin)  # ← ДОБАВЛЯЕТ!
         self._strategies.sort(key=lambda x: x[2], reverse=True)
-    
+        
+        logger.info(f"[SpecNormalizer] Добавлено {len(builtin)} встроенных стратегий, всего стратегий: {len(self._strategies)}")
+
     def _load_templates(self):
         """Загружает шаблоны из templates.json и преобразует их в стратегии."""
         import json
         import os
+        from nextt.config import get_resource_path
         
-        if not os.path.exists(self.templates_file):
-            logger.info(f"  [SpecNormalizer] Файл шаблонов не найден: {self.templates_file}")
+        # Ищем файл в нескольких местах
+        possible_paths = [
+            self.templates_file,  # переданный путь
+            "templates.json",     # текущая директория
+            get_resource_path("templates.json"),  # ресурсы
+            os.path.join(os.path.dirname(__file__), "templates.json"),  # рядом с normalizer.py
+        ]
+        
+        found_path = None
+        for path in possible_paths:
+            if path and os.path.exists(path):
+                found_path = path
+                break
+        
+        if not found_path:
+            logger.info(f"[SpecNormalizer] Файл шаблонов не найден")
             return
         
         try:
-            with open(self.templates_file, 'r', encoding='utf-8') as f:
+            with open(found_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
             templates = data.get("шаблоны", []) if isinstance(data, dict) else data
             
-            logger.info(f"  [SpecNormalizer] Найдено {len(templates)} шаблонов в файле")
+            logger.info(f"[SpecNormalizer] Найдено {len(templates)} шаблонов в файле: {found_path}")
+            
+            added_count = 0
             
             for template_data in templates:
                 template_id = template_data.get("id", "")
-                regex_pattern = template_data.get("regex_pattern", "")
-                group_mapping = template_data.get("group_mapping", {})
+                mask = template_data.get("mask", "")
                 connection = template_data.get("connection", "VK-правое")
-                height_transform = template_data.get("height_transform", "direct")
-                length_transform = template_data.get("length_transform", "direct")
-                type_transform = template_data.get("type_transform", {})
-                side_mapping = template_data.get("side_mapping", {})
                 priority = template_data.get("priority", 90)
                 
-                if not regex_pattern:
+                # Если нет mask — пропускаем
+                if not mask:
                     continue
                 
-                logger.info(f"  [SpecNormalizer] Загружаем шаблон {template_id}: regex='{regex_pattern}', priority={priority}")
+                # ================================================================
+                # ПРЕОБРАЗОВАНИЕ MASK В РЕГУЛЯРНОЕ ВЫРАЖЕНИЕ
+                # ================================================================
+                import re
+                # Пример: "{type}CV-{height}-{length} L"
+                # Станет: r'\b(\d+)CV-(\d+)-(\d+) L(?:\s|$|[,.;:!?])'
                 
-                # Создаём функцию-стратегию для этого шаблона
-                def make_template_strategy(
-                    pattern=regex_pattern,
-                    groups=group_mapping,
-                    conn=connection,
-                    h_transform=height_transform,
-                    l_transform=length_transform,
-                    t_transform=type_transform,
-                    s_mapping=side_mapping,
-                    conf=priority / 100
-                ):
+                # Временно заменяем {type}, {height}, {length} на плейсхолдеры
+                temp_mask = mask
+                temp_mask = temp_mask.replace("{type}", "###TYPE###")
+                temp_mask = temp_mask.replace("{height}", "###HEIGHT###")
+                temp_mask = temp_mask.replace("{length}", "###LENGTH###")
+                
+                # Экранируем все специальные символы
+                escaped = re.escape(temp_mask)
+                
+                # Возвращаем группы захвата
+                regex_pattern = escaped
+                regex_pattern = regex_pattern.replace("###TYPE###", "(\\d+)")
+                regex_pattern = regex_pattern.replace("###HEIGHT###", "(\\d+)")
+                regex_pattern = regex_pattern.replace("###LENGTH###", "(\\d+)")
+                
+                # Добавляем границу слова в начале и разделители в конце
+                regex_pattern = r'\b' + regex_pattern + r'(?:\s|$|[,.;:!?])'
+                
+                # ================================================================
+                # СОЗДАЁМ СТРАТЕГИЮ
+                # ================================================================
+                def make_strategy(pattern=regex_pattern, conn=connection, conf=priority/100, tid=template_id):
                     def strategy(text, original):
                         try:
-                            import re
                             match = re.search(pattern, text, re.IGNORECASE)
                             if not match:
                                 return None
                             
-                            type_str = None
-                            height_str = None
-                            length_str = None
+                            type_str = match.group(1)
+                            height_str = match.group(2)
+                            length_str = match.group(3)
                             
-                            if "тип" in groups:
-                                type_str = match.group(groups["тип"])
-                            if "высота" in groups:
-                                height_str = match.group(groups["высота"])
-                            if "длина" in groups:
-                                length_str = match.group(groups["длина"])
-                            
-                            if not type_str or not height_str or not length_str:
+                            # Преобразуем тип
+                            rad_type = type_str
+                            if rad_type == '12':
+                                rad_type = '21'
+                            elif rad_type not in ['10', '11', '20', '21', '22', '30', '33']:
                                 return None
-                            
-                            rad_type = t_transform.get(type_str, type_str)
                             
                             try:
                                 height = int(height_str)
-                                if h_transform == "code * 10":
-                                    height = height * 10
-                                elif h_transform == "code * 100":
-                                    height = height * 100
                             except:
-                                height = 0
+                                return None
                             
                             try:
                                 length = int(length_str)
-                                if l_transform == "code * 10":
-                                    length = length * 10
-                                elif l_transform == "code * 100":
-                                    length = length * 100
                             except:
-                                length = 0
+                                return None
                             
+                            # Проверяем валидность
                             if height not in [300, 400, 500, 600, 900]:
                                 return None
                             if length < 400 or length > 3000 or length % 100 != 0:
                                 return None
-                            if rad_type not in ['10', '11', '20', '21', '22', '30', '33']:
-                                if rad_type == '12':
-                                    rad_type = '21'
-                                else:
-                                    return None
                             
-                            original_upper = original.strip().upper()
-                            for suffix, side_val in s_mapping.items():
-                                if original_upper.endswith(suffix.upper()):
-                                    if side_val == "левое" and conn == "VK-правое":
-                                        conn = "VK-левое"
-                                    break
+                            # ================================================================
+                            # КОРРЕКТИРОВКА ПОДКЛЮЧЕНИЯ ДЛЯ УНИВЕРСАЛЬНЫХ ТИПОВ
+                            # ================================================================
+                            # Универсальные типы (20, 21, 22) — всегда VK-правое
+                            if rad_type in ['20', '21', '22']:
+                                final_connection = "VK-правое"
+                            else:
+                                final_connection = conn
                             
                             result = ParsedRadiator()
                             result.recognized = True
-                            result.connection = conn
+                            result.connection = final_connection
                             result.rad_type = rad_type
                             result.height = height
                             result.length = length
                             result.confidence = conf
-                            result.source = f"template_{template_id}"
+                            result.source = f"template_{tid}"
                             return result
-                        except Exception as e:
+                        except:
                             return None
-                    
                     return strategy
                 
-                # Добавляем шаблон в начало списка (чтобы проверялся первым)
-                self._strategies.insert(0, (f"template_{template_id}", make_template_strategy(), priority / 100))
+                # ДОБАВЛЯЕМ шаблон в список стратегий
+                self._strategies.append((f"template_{template_id}", make_strategy(), priority / 100))
+                added_count += 1
+                logger.info(f"[SpecNormalizer] Добавлен шаблон: {template_id} (mask='{mask}', priority={priority/100:.2f})")
             
-            # Сортируем по приоритету (убывание)
+            # Сортируем по приоритету
             self._strategies.sort(key=lambda x: x[2], reverse=True)
-            logger.info(f"  [SpecNormalizer] Загружено {len(templates)} шаблонов, всего стратегий: {len(self._strategies)}")
+            
+            logger.info(f"[SpecNormalizer] Загружено и добавлено {added_count} шаблонов, всего стратегий: {len(self._strategies)}")
             
         except Exception as e:
-            logger.error(f"Ошибка загрузки шаблонов в SpecNormalizer: {e}")
+            logger.error(f"[SpecNormalizer] Ошибка загрузки шаблонов: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
     
     def reload_templates(self):
         """Перезагружает шаблоны (вызывается после обучения нового шаблона)."""
@@ -563,6 +561,140 @@ class SpecNormalizer:
     # ========================================================================
     # ПАРСЕРЫ
     # ========================================================================
+
+    # ================================================================
+    # НОВАЯ СТРАТЕГИЯ: УНИВЕРСАЛЬНЫЙ ПАРСЕР ДЛЯ РАДИАТОРОВ EVRA
+    # ================================================================
+    def _parse_evra_format(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
+        """
+        УНИВЕРСАЛЬНЫЙ ПАРСЕР ДЛЯ РАДИАТОРОВ EVRA
+        Распознаёт все форматы:
+        - {type}CV-{height}-{length}[ L|L|]
+        - {type}C-{height}-{length}[ L|L|]
+        
+        Где:
+        - type: 10, 11, 20, 21, 22, 30, 33
+        - height: 300, 400, 500, 600, 900
+        - length: от 400 до 3000 с шагом 100
+        - L или R в конце (опционально)
+        """
+        try:
+            import re
+            
+            # Объединяем текст для поиска
+            combined = (text + " " + original).strip()
+            
+            # ================================================================
+            # ШАГ 1: ИЩЕМ ПАТТЕРН
+            # ================================================================
+            # Паттерн: тип + CV или C + высота + длина + опционально L/R
+            # Примеры: 22CV-300-700 L, 33C-500-1000, 11CV-500-400L
+            pattern = r'\b(\d{2})(CV|C)[\-](\d{3,4})[\-](\d{3,4})\s*([LR]?)\b'
+            match = re.search(pattern, combined, re.IGNORECASE)
+            
+            if not match:
+                return None
+            
+            # ================================================================
+            # ШАГ 2: ИЗВЛЕКАЕМ ДАННЫЕ
+            # ================================================================
+            rad_type = match.group(1)        # 22, 33, 11, etc.
+            connection_type = match.group(2).upper()  # CV или C
+            height_str = match.group(3)      # 300, 500, etc.
+            length_str = match.group(4)      # 700, 1100, etc.
+            side = match.group(5).upper()    # L, R, или пусто
+            
+            # ================================================================
+            # ШАГ 3: ПРОВЕРЯЕМ ВАЛИДНОСТЬ ТИПА
+            # ================================================================
+            if rad_type not in ['10', '11', '20', '21', '22', '30', '33']:
+                # Тип 12 преобразуем в 21
+                if rad_type == '12':
+                    rad_type = '21'
+                else:
+                    return None
+            
+            # ================================================================
+            # ШАГ 4: ПРОВЕРЯЕМ ВЫСОТУ
+            # ================================================================
+            try:
+                height = int(height_str)
+            except ValueError:
+                return None
+            
+            # Допустимые высоты: 300, 400, 500, 600, 900
+            if height not in [300, 400, 500, 600, 900]:
+                # Пытаемся исправить через HEIGHT_MAPPING
+                if height in self.HEIGHT_MAPPING:
+                    height = self.HEIGHT_MAPPING[height]
+                else:
+                    return None
+            
+            # ================================================================
+            # ШАГ 5: ПРОВЕРЯЕМ ДЛИНУ
+            # ================================================================
+            try:
+                length = int(length_str)
+            except ValueError:
+                return None
+            
+            # Допустимые длины: от 400 до 3000 с шагом 100
+            if length < 400 or length > 3000 or length % 100 != 0:
+                # Пытаемся округлить
+                rounded = round(length / 100) * 100
+                if 400 <= rounded <= 3000:
+                    length = rounded
+                else:
+                    return None
+            
+            # ================================================================
+            # ШАГ 6: ОПРЕДЕЛЯЕМ ПОДКЛЮЧЕНИЕ
+            # ================================================================
+            
+            # Базовое подключение: CV = VK (нижнее), C = K (боковое)
+            if connection_type == 'CV':
+                base_connection = "VK"
+            else:  # 'C'
+                base_connection = "K"
+            
+            # Универсальные типы (20, 21, 22) — всегда VK-правое
+            # У них нет левого исполнения, игнорируем L/R
+            if rad_type in ['20', '21', '22']:
+                if base_connection == "VK":
+                    final_connection = "VK-правое"
+                else:
+                    # Для типа 22 с C (боковое) — оставляем K-боковое
+                    final_connection = "K-боковое"
+            else:
+                # Направленные типы (10, 11, 30, 33)
+                if base_connection == "VK":
+                    # VK-нижнее: L → левое, R или пусто → правое
+                    if side == 'L':
+                        final_connection = "VK-левое"
+                    else:
+                        final_connection = "VK-правое"
+                else:
+                    # K-боковое: всегда K-боковое (левого/правого нет)
+                    final_connection = "K-боковое"
+            
+            # ================================================================
+            # ШАГ 7: СОЗДАЁМ РЕЗУЛЬТАТ
+            # ================================================================
+            result = ParsedRadiator()
+            result.recognized = True
+            result.connection = final_connection
+            result.rad_type = rad_type
+            result.height = height
+            result.length = length
+            result.confidence = 0.98
+            result.source = "evra_format"
+            result.brand = "evra"
+            
+            return result
+            
+        except Exception as e:
+            self._log(f"EVRA format parser error: {e}", "ERROR")
+            return None
 
     def _parse_oasis(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
         """Парсинг Oasis: PN 22-4-05, PB 22-5-04, OC-11-5-04"""

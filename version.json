@@ -1,14 +1,11 @@
 {
-    "version": "2.3",
-    "version_code": 23,
-    "download_url": "https://b24.engpx.ru/~kMmVo",
-    "release_date": "2026-06-17",
-    "is_mandatory": false,
-    "whats_new": [
-        "Улучшено распознавание шаблонов",
-        "Улучшен парсинг PDF-файлов",
-        "Оптимизирована работа с PDF-файлами",
-        "Исправлен подсчет итоговой строки в таблице соответствия"
-    ],
-    "min_supported_version": "2.0"
+  "version": "2.4",
+  "version_code": 24,
+  "download_url": "https://b24.engpx.ru/~kMmVo",
+  "release_date": "2026-07-01",
+  "is_mandatory": false,
+  "whats_new": [
+    "В меню кнопки Информация добавлен Формуляр регистрации проектов"
+  ],
+  "min_supported_version": "2.0"
 }
