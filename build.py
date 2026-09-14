@@ -63,7 +63,7 @@ else:
 # ============================================================================
 args = [
     main_script,
-    "--name=NexTT-2.4",                    # ← ИМЯ ВЫХОДНОГО EXE (можно менять)
+    "--name=NexTT-2.7",                    # ← ИМЯ ВЫХОДНОГО EXE (можно менять)
     "--onefile",                           # один EXE файл
     "--windowed",                          # без консольного окна (убрать для dev)
     "--icon=" + os.path.join(resources_dir, "icon.ico"),  # иконка
@@ -116,7 +116,7 @@ hidden_imports = [
     "nextt.utils.dpi",
     "nextt.utils.window_manager",
     "nextt.utils.font_manager",
-    "nextt.utils.update_checker",           # ← НОВЫЙ МОДУЛЬ (проверка обновлений)
+    "nextt.utils.update_checker",           
     "nextt.ui.main_window",
     "nextt.ui.dialogs.correspondence",
     "nextt.ui.dialogs.meteor_selector",
@@ -158,7 +158,7 @@ for mod in excludes:
 # ЗАПУСК СБОРКИ
 # ============================================================================
 print("=" * 60)
-print("Сборка NexTT 2.0 с экспериментальной фичей")
+print("Сборка NexTT 2.7 с экспериментальной фичей")
 print("=" * 60)
 print(f"Главный скрипт: {main_script}")
 print(f"Ресурсы: {resources_dir}")
