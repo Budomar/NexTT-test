@@ -53,6 +53,9 @@ class MainWindow:
             "VK-правое": "10",
             "VK-левое": "10",
             "K-боковое": "10",
+            "HV-правое": "10",   # НОВОЕ
+            "HV-левое": "10",    # НОВОЕ
+            "H-боковое": "10",   # НОВОЕ
         }
 
         # Переменные (всегда начинаются с значений по умолчанию)
@@ -60,9 +63,6 @@ class MainWindow:
         self.radiator_discount_var = tk.StringVar(value="0")
         self.bracket_discount_var = tk.StringVar(value="0")
         self.show_tooltips_var = tk.BooleanVar(value=False)
-
-        # Таймер для мигания
-        self._blink_after_id: Optional[str] = None
 
         # Ссылки на диалоги для закрытия при сбросе
         self._preview_dialog: Optional[object] = None
@@ -162,9 +162,6 @@ class MainWindow:
         if hasattr(self, '_conn_var') and hasattr(self, '_type_var'):
             self._build_matrix(self._conn_var.get(), self._type_var.get())
         
-        # Обновляем типы радиаторов
-        self._update_type_buttons()
-
     def _setup_styles(self) -> None:
         """Настройка стилей ttk с учётом масштаба шрифта."""
         style = ttk.Style()
@@ -176,34 +173,100 @@ class MainWindow:
         # Используем масштабируемые шрифты из FontManager
         default_font = self.app.font_manager.get_default_font()
         heading_font = self.app.font_manager.get_heading_font()
+        bold_font = self.app.font_manager.get_bold_font()
         
         style.configure('TLabel', background='#dedede', font=default_font)
         style.configure('TEntry', font=default_font, fieldbackground='white')
-        style.configure('TRadiobutton', background='#dedede', font=default_font)
-        style.configure('TCheckbutton', background='#dedede', font=default_font)
+        
+        # ========== РАССЧИТЫВАЕМ ВЫСОТУ ДЛЯ РАДИОКНОПОК ==========
+        import tkinter.font as tkfont
+        font_obj = tkfont.Font(font=default_font)
+        row_height = font_obj.metrics('linespace') * 2 + 10
+        
+        # ================================================================
+        # ЕДИНЫЙ СТИЛЬ ДЛЯ ВСЕХ РАДИОКНОПОК (БЕЗ ФОНА) - ТЕПЕРЬ ЖИРНЫЙ
+        # ================================================================
+        style.configure('TRadiobutton',
+                        background='#dedede',
+                        foreground='#444141',
+                        font=bold_font,
+                        height=row_height)
+        
+        # ================================================================
+        # СТИЛЬ ДЛЯ ГИГИЕНИЧЕСКИХ РАДИАТОРОВ (ЯРКИЙ ЗЕЛЁНЫЙ) - ТЕПЕРЬ ЖИРНЫЙ
+        # ================================================================
+        style.configure('Green.TRadiobutton',
+                        background='#dedede',
+                        foreground='#008000',
+                        font=bold_font,
+                        height=row_height)
+        
+        # ================================================================
+        # СТИЛЬ ДЛЯ АКТИВНОГО БЛОКА CLASSIC (ФОН ТЕМНЕЕ)
+        # ================================================================
+        style.configure('Active.TRadiobutton',
+                        background='#c8c8c8',
+                        foreground='#444141',
+                        font=bold_font,
+                        height=row_height)
+        
+        # ================================================================
+        # СТИЛЬ ДЛЯ АКТИВНОГО БЛОКА HYGIENE (ФОН ТЕМНЕЕ, ТЕКСТ ЗЕЛЁНЫЙ)
+        # ================================================================
+        style.configure('Active.Green.TRadiobutton',
+                        background='#c8c8c8',
+                        foreground='#008000',
+                        font=bold_font,
+                        height=row_height)
+        
+        # ================================================================
+        # СТИЛЬ ДЛЯ КНОПОК ТИПА РАДИАТОРА - ТЕПЕРЬ ЖИРНЫЙ
+        # ================================================================
+        style.configure('Type.TRadiobutton',
+                        background='#dedede',
+                        foreground='#444141',
+                        font=bold_font,
+                        height=font_obj.metrics('linespace') + 10)
+        
+        # ================================================================
+        # СТИЛЬ ДЛЯ АКТИВНОЙ КНОПКИ ТИПА РАДИАТОРА (ФОН ТЕМНЕЕ)
+        # ================================================================
+        style.configure('Active.Type.TRadiobutton',
+                        background='#c8c8c8',
+                        foreground='#444141',
+                        font=bold_font,
+                        height=font_obj.metrics('linespace') + 10)
 
-        # Подсвеченная радиокнопка (бордовая)
-        style.configure('Highlighted.TRadiobutton',
-                        background='#7E1A2F', foreground='white', font=default_font)
+        # ================================================================
+        # СТИЛЬ ДЛЯ ЧЕКБОКСА
+        # ================================================================
+        style.configure('TCheckbutton',
+                        background='#dedede',
+                        font=default_font)
 
-        # Кнопки
+        # ================================================================
+        # СТИЛЬ ДЛЯ КНОПОК
+        # ================================================================
         style.configure('TButton', font=default_font,
                         background='#263168', foreground='white')
         style.map('TButton',
                   background=[('active', '#7E1A2F'), ('!disabled', '#263168')],
                   foreground=[('!disabled', 'white')])
 
-        # Menubutton
+        # ================================================================
+        # СТИЛЬ ДЛЯ MENUBUTTON
+        # ================================================================
         style.configure('TMenubutton', font=default_font,
                         background='#263168', foreground='white', arrowcolor='white')
         style.map('TMenubutton',
                   background=[('active', '#7E1A2F')],
                   foreground=[('!active', 'white')],
                   arrowcolor=[('!active', 'white')])
-
-    # ==================================================================
-    # ПОСТРОЕНИЕ ИНТЕРФЕЙСА
-    # ==================================================================
+        
+        # ================================================================
+        # СТИЛЬ ДЛЯ КОМБОБОКСА
+        # ================================================================
+        style.configure('TCombobox', font=default_font, fieldbackground='white')
 
     def _build_ui(self) -> None:
         """Создаёт интерфейс."""
@@ -216,8 +279,8 @@ class MainWindow:
         # Загружаем подсказки с картинками ДО настроек (чтобы привязка событий работала)
         self._create_image_tooltips()
 
-        # --- ПАНЕЛЬ НАСТРОЕК (подключение + тип + шрифт + чекбокс) ---
-        self._create_settings_row(main_frame)
+        # --- ПАНЕЛЬ НАСТРОЕК (подключение + типы + чекбокс в одной строке) ---
+        self._create_settings_row(main_frame)  # ВСЁ В ОДНОЙ СТРОКЕ
 
         # --- МАТРИЦА ---
         matrix_container = ttk.Frame(main_frame)
@@ -272,15 +335,16 @@ class MainWindow:
         info_menu.add_command(label="Лицензионное соглашение", command=self._on_license)
         info_menu.add_command(label="Инструкция по использованию", command=self._on_instruction)
         info_menu.add_separator()
-        info_menu.add_command(label="Прайс-лист", command=self._on_price_list)
+        # info_menu.add_command(label="Прайс-лист", command=self._on_price_list)
         info_menu.add_command(label="Каталог оборудования", command=self._on_catalog)
+        info_menu.add_command(label="BIM-модели радиаторов", command=lambda: webbrowser.open("https://b24.engpx.ru/~QQD8Z")) 
         info_menu.add_separator()
         info_menu.add_command(label="Паспорт на радиатор", command=self._on_passport)
         info_menu.add_command(label="Сертификат соответствия", command=self._on_certificate)
         info_menu.add_command(label="Гигиенический сертификат", command=lambda: webbrowser.open("https://b24.engpx.ru/~IPOCe"))
         info_menu.add_command(label="Формуляр для регистрации проектов", command=self._formulyar)  
-        info_menu.add_separator()
-        info_menu.add_command(label="BIM-модели радиаторов", command=lambda: webbrowser.open("https://b24.engpx.ru/~QQD8Z"))  
+        # info_menu.add_separator()
+        # info_menu.add_command(label="BIM-модели радиаторов", command=lambda: webbrowser.open("https://b24.engpx.ru/~QQD8Z"))  
         info_btn["menu"] = info_menu
 
         btn_check_update = ttk.Button(menu_frame, text="Проверить обновление",
@@ -334,11 +398,11 @@ class MainWindow:
                 "Функция временно недоступна."
             )
     # ==================================================================
-    # ПАНЕЛЬ НАСТРОЕК (с подсказками и миганием)
+    # ПАНЕЛЬ НАСТРОЕК (ВСЁ В ОДНОЙ СТРОКЕ)
     # ==================================================================
 
     def _create_settings_row(self, parent: ttk.Frame) -> None:
-        """Строка настроек: подключение, тип, шрифт, чекбокс."""
+        """Строка настроек: подключение + тип + чекбокс (всё в одной строке)."""
         settings_frame = ttk.Frame(parent)
         settings_frame.pack(fill="x", padx=5, pady=5)
 
@@ -347,107 +411,398 @@ class MainWindow:
 
         # Получаем масштабированные шрифты
         default_font = self.app.font_manager.get_default_font()
-        small_font = self.app.font_manager.get_small_font()
+        bold_font = self.app.font_manager.get_bold_font()
+        
+        # ========== РАСЧЁТ ШИРИНЫ НА ОСНОВЕ МАСШТАБА ==========
+        import tkinter.font as tkfont
+        font_obj = tkfont.Font(font=default_font)
+        
+        # Высота строки (увеличена для двухстрочного текста)
+        row_height = font_obj.metrics('linespace') * 2 + 20
+        
+        # Ширина для подписей
+        label_width = max(
+            font_obj.measure("Classic:"),
+            font_obj.measure("Hygiene:"),
+            font_obj.measure("Тип радиатора:")
+        ) + 10
+        
+        # Ширина для каждой радиокнопки подключения
+        conn_first_lines = ["VK-нижнее", "VK-нижнее", "K-боковое", "HV нижнее", "HV нижнее", "H-боковое"]
+        conn_second_lines = ["правое", "левое", "", "правое", "левое", ""]
+        max_conn_line = max(
+            max(font_obj.measure(line) for line in conn_first_lines if line),
+            max(font_obj.measure(line) for line in conn_second_lines if line)
+        )
+        conn_btn_width = max_conn_line + 40
+        
+        # Ширина для каждой радиокнопки типа
+        type_texts = ["10", "11", "20", "21", "22", "30", "33"]
+        type_btn_width = max(font_obj.measure(text) for text in type_texts) + 25
+        
+        # Ширина для чекбокса
+        checkbox_text = "Подсказки"
+        checkbox_width = font_obj.measure(checkbox_text) + 35
+        
+        # ========== НАСТРОЙКА 18 КОЛОНОК (БЫЛО 17) ==========
+        # Колонки:
+        # 0 - Classic:
+        # 1-3 - рамка Classic
+        # 4 - Hygiene:
+        # 5-7 - рамка Hygiene
+        # 8 - Тип радиатора:
+        # 9-15 - рамка типов
+        # 16 - растягиваемый промежуток
+        # 17 - чекбокс
+        
+        for col in range(18):
+            top_row.columnconfigure(col, weight=0)
+        
+        top_row.columnconfigure(16, weight=1)
+        top_row.columnconfigure(17, weight=0, minsize=checkbox_width)
 
-        # --- Подключение ---
-        ttk.Label(top_row, text="Вид подключения:", font=default_font).pack(
-            side="left", padx=(0, 5), pady=5)
+        # ================================================================
+        # ПОДПИСЬ "Classic:" (колонка 0) — жирный шрифт, чёрный цвет
+        # ================================================================
+        ttk.Label(
+            top_row,
+            text="Classic:",
+            font=bold_font,
+            foreground='#000000'
+        ).grid(row=0, column=0, padx=(0, 5), pady=5, sticky="ns")
 
-        conn_frame = tk.Frame(top_row, relief="solid", borderwidth=1, bg='#dedede')
-        conn_frame.pack(side="left", padx=0, pady=0)
-
-        self._conn_var = tk.StringVar(value="VK-правое")
-        self._connection_radio_buttons.clear()
-
-        connections = [
-            ("VK-нижнее правое", "VK-правое"),
-            ("VK-нижнее левое", "VK-левое"),
+        # ================================================================
+        # БЛОК 1: КЛАССИЧЕСКИЕ РАДИАТОРЫ (VK-правое, VK-левое, K-боковое)
+        # ================================================================
+        classic_frame = tk.Frame(top_row, relief="solid", borderwidth=1, bg='#dedede')
+        classic_frame.grid(row=0, column=1, columnspan=3, sticky="nsew", padx=2, pady=2)
+        classic_frame.grid_rowconfigure(0, weight=1)
+        
+        # Сохраняем ссылку на внешний фрейм Classic
+        self._classic_frame = classic_frame
+        
+        # --- Радиокнопки подключения ---
+        classic_connections = [
+            ("VK-правое", "VK-нижнее\n   правое"),
+            ("VK-левое", "VK-нижнее\n   левое"),
             ("K-боковое", "K-боковое"),
         ]
-        for text, value in connections:
+        
+        self._conn_var = tk.StringVar(value="VK-правое")
+        self._connection_radio_buttons.clear()
+        self._classic_radio_buttons = []
+        
+        for col, (value, text) in enumerate(classic_connections):
+            cell_frame = tk.Frame(classic_frame, bg='#dedede')
+            cell_frame.grid(row=0, column=col, sticky="nsew", padx=2, pady=2)
+            cell_frame.grid_rowconfigure(0, weight=1)
+            cell_frame.grid_columnconfigure(0, weight=1)
+            classic_frame.columnconfigure(col, weight=1)
+            
             rb = ttk.Radiobutton(
-                conn_frame, text=text, variable=self._conn_var, value=value,
+                cell_frame,
+                text=text,
+                variable=self._conn_var,
+                value=value,
+                style="TRadiobutton",
                 command=self._on_connection_changed
             )
-            rb.pack(side="left", padx=10, pady=5)
+            rb.grid(row=0, column=0, sticky="nsew")
             self._connection_radio_buttons.append(rb)
+            self._classic_radio_buttons.append(rb)
 
-            # # Привязываем подсказки с картинками(ЗАКОММЕНТИРОВАНО)
-            # if value == "VK-правое" and self._vk_right_tooltip:
-            #     rb.bind("<Enter>", lambda e, t=self._vk_right_tooltip, w=rb: self._show_image_tooltip(t, w))
-            #     rb.bind("<Leave>", lambda e, t=self._vk_right_tooltip: self._hide_image_tooltip(t))
-            # elif value == "VK-левое" and self._vk_left_tooltip:
-            #     rb.bind("<Enter>", lambda e, t=self._vk_left_tooltip, w=rb: self._show_image_tooltip(t, w))
-            #     rb.bind("<Leave>", lambda e, t=self._vk_left_tooltip: self._hide_image_tooltip(t))
-            # elif value == "K-боковое" and self._k_side_tooltip:
-            #     rb.bind("<Enter>", lambda e, t=self._k_side_tooltip, w=rb: self._show_image_tooltip(t, w))
-            #     rb.bind("<Leave>", lambda e, t=self._k_side_tooltip: self._hide_image_tooltip(t))
+        # ================================================================
+        # ПОДПИСЬ "Hygiene:" (колонка 4) — жирный шрифт, зелёный цвет
+        # ================================================================
+        ttk.Label(
+            top_row,
+            text="Hygiene:",
+            font=bold_font,
+            foreground='#008000'
+        ).grid(row=0, column=4, padx=(10, 5), pady=5, sticky="ns")
 
-        # --- Тип радиатора ---
-        ttk.Label(top_row, text="Тип радиатора:", font=default_font).pack(
-            side="left", padx=(20, 5), pady=5)
-
-        self._type_frame_outer = tk.Frame(top_row, relief="solid", borderwidth=1, bg='#dedede')
-        self._type_frame_outer.pack(side="left", padx=0, pady=0)
-
-        self._type_var = tk.StringVar(value="10")
-        self._type_buttons_frame = ttk.Frame(self._type_frame_outer)
-        self._type_buttons_frame.pack(fill="x", padx=5, pady=5)
-        self._update_type_buttons()
-
-        # ========== КНОПКИ ШРИФТА (ФИКСИРОВАННЫЕ ЧЕРЕЗ place) ==========
-        # Создаём контейнер, который будет служить "якорем" для абсолютного позиционирования
-        font_anchor = ttk.Frame(top_row)
-        font_anchor.pack(side="right", padx=(0, 10), pady=0)
-
-        # Сам блок масштаба (без рамки)
-        font_frame = tk.Frame(font_anchor, bg='#dedede')
-        font_frame.pack()
-
-        ttk.Label(font_frame, text="Масштаб:", font=default_font).pack(side="left", padx=(6, 3), pady=3)
-
-        # Кнопка "-" (уменьшить) - синяя, как все остальные кнопки
-        btn_minus = ttk.Button(
-            font_frame,
-            text="−",
-            width=2,
-            command=self._decrease_font_scale
-        )
-        btn_minus.pack(side="left", padx=1, pady=3)
-
-        # Окошко с текущим значением масштаба
-        self.font_scale_var = tk.StringVar(value=f"{self.app.font_manager.scale:.2f}")
+        # ================================================================
+        # БЛОК 2: ГИГИЕНИЧЕСКИЕ РАДИАТОРЫ (HV-правое, HV-левое, H-боковое)
+        # ================================================================
+        hygiene_frame = tk.Frame(top_row, relief="solid", borderwidth=1, bg='#dedede')
+        hygiene_frame.grid(row=0, column=5, columnspan=3, sticky="nsew", padx=2, pady=2)
+        hygiene_frame.grid_rowconfigure(0, weight=1)
         
-        scale_label = tk.Label(
-            font_frame,
-            textvariable=self.font_scale_var,
-            width=5,
-            relief="solid",
-            borderwidth=1,
-            bg='white',
-            font=default_font,
-            anchor="center"
-        )
-        scale_label.pack(side="left", padx=1, pady=3)
+        # Сохраняем ссылку на внешний фрейм Hygiene
+        self._hygiene_frame = hygiene_frame
+        
+        # --- Радиокнопки подключения ---
+        hygiene_connections = [
+            ("HV-правое", "HV нижнее\n   правое"),
+            ("HV-левое", "HV нижнее\n   левое"),
+            ("H-боковое", "H-боковое"),
+        ]
+        
+        self._hygiene_radio_buttons = []
+        
+        for col, (value, text) in enumerate(hygiene_connections):
+            cell_frame = tk.Frame(hygiene_frame, bg='#dedede')
+            cell_frame.grid(row=0, column=col, sticky="nsew", padx=2, pady=2)
+            cell_frame.grid_rowconfigure(0, weight=1)
+            cell_frame.grid_columnconfigure(0, weight=1)
+            hygiene_frame.columnconfigure(col, weight=1)
+            
+            rb = ttk.Radiobutton(
+                cell_frame,
+                text=text,
+                variable=self._conn_var,
+                value=value,
+                style="Green.TRadiobutton",
+                command=self._on_connection_changed
+            )
+            rb.grid(row=0, column=0, sticky="nsew")
+            self._connection_radio_buttons.append(rb)
+            self._hygiene_radio_buttons.append(rb)
 
-        # Кнопка "+" (увеличить) - синяя, как все остальные кнопки
-        btn_plus = ttk.Button(
-            font_frame,
-            text="+",
-            width=2,
-            command=self._increase_font_scale
+        # ================================================================
+        # ЗАГОЛОВОК "Тип радиатора:" (колонка 8)
+        # ================================================================
+        ttk.Label(top_row, text="Тип радиатора:", font=default_font).grid(
+            row=0, column=8, padx=(20, 5), pady=5, sticky="ns"
         )
-        btn_plus.pack(side="left", padx=1, pady=3)
 
-        # --- Чекбокс ---
-        cb_frame = tk.Frame(top_row, relief="solid", borderwidth=1, bg='#dedede')
-        cb_frame.pack(side="right", padx=(0, 10), pady=0)
+        # ================================================================
+        # БЛОК 3: ТИПЫ РАДИАТОРОВ (10, 11, 20, 21, 22, 30, 33)
+        # ================================================================
+        type_frame = tk.Frame(top_row, relief="solid", borderwidth=1, bg='#dedede')
+        type_frame.grid(row=0, column=9, columnspan=7, sticky="nsew", padx=2, pady=2)
+        type_frame.grid_rowconfigure(0, weight=1)
+        
+        self._type_var = tk.StringVar(value="10")
+        self._type_radio_buttons.clear()
+        self._type_cell_frames = {}
+        
+        type_cols = {
+            "10": 0,
+            "11": 1,
+            "20": 2,
+            "21": 3,
+            "22": 4,
+            "30": 5,
+            "33": 6,
+        }
+        
+        for rt, col in type_cols.items():
+            cell_frame = tk.Frame(type_frame, bg='#dedede')
+            cell_frame.grid(row=0, column=col, sticky="nsew", padx=2, pady=2)
+            cell_frame.grid_rowconfigure(0, weight=1)
+            cell_frame.grid_columnconfigure(0, weight=1)
+            type_frame.columnconfigure(col, weight=1)
+            
+            rb = ttk.Radiobutton(
+                cell_frame,
+                text=rt,
+                variable=self._type_var,
+                value=rt,
+                style="Type.TRadiobutton",
+                command=self._on_type_changed
+            )
+            rb.grid(row=0, column=0, sticky="nsew")
+            self._type_radio_buttons[rt] = rb
+            self._type_cell_frames[rt] = cell_frame
+
+        # --- Колонка 16 — растягиваемый промежуток ---
+
+        # --- Чекбокс "Подсказки" (колонка 17) ---
+        cell_frame = tk.Frame(top_row, bg='#dedede')
+        cell_frame.grid(row=0, column=17, sticky="nsew", padx=(5, 5), pady=2)
+        cell_frame.grid_rowconfigure(0, weight=1)
+        cell_frame.grid_columnconfigure(0, weight=1)
+        
+        cb_frame = tk.Frame(cell_frame, relief="solid", borderwidth=1, bg='#dedede')
+        cb_frame.grid(row=0, column=0, sticky="e")
+        cb_frame.grid_rowconfigure(0, weight=1)
+        cb_frame.grid_columnconfigure(0, weight=1)
+
+        cb_inner = tk.Frame(cb_frame, bg='#dedede')
+        cb_inner.grid(row=0, column=0, sticky="nsew")
+        cb_inner.grid_rowconfigure(0, weight=1)
+        cb_inner.grid_columnconfigure(0, weight=1)
 
         ttk.Checkbutton(
-            cb_frame,
-            text="Показывать параметры и стоимость",
+            cb_inner,
+            text="Подсказки",
             variable=self.show_tooltips_var
-        ).pack(side="right", padx=8, pady=5)
+        ).grid(row=0, column=0, padx=8, pady=5, sticky="nsew")
+        
+        self._checkbox_frame = cb_frame
+        
+        self._update_type_buttons_visibility()
+        
+        # ================================================================
+        # ПЕРВИЧНАЯ ПОДСВЕТКА АКТИВНОГО БЛОКА (по умолчанию — Classic)
+        # ================================================================
+        self._update_connection_block_highlight()
+
+    def _update_type_buttons_visibility(self) -> None:
+        """Обновляет видимость кнопок типов в зависимости от подключения."""
+        conn = self._conn_var.get()
+        
+        # Определяем, какие типы должны быть видны
+        if conn == "VK-левое":
+            visible_types = ["10", "11", "30", "33"]
+        elif conn == "HV-левое":
+            visible_types = ["10", "30"]
+        elif conn == "HV-правое":
+            visible_types = ["10", "20", "30"]
+        elif conn == "H-боковое":
+            visible_types = ["10", "20", "30"]
+        else:  # VK-правое, K-боковое
+            visible_types = ["10", "11", "20", "21", "22", "30", "33"]
+        
+        # Показываем/скрываем кнопки (используем grid_remove, чтобы позиции не менялись)
+        for rt, rb in self._type_radio_buttons.items():
+            if rt in visible_types:
+                # Находим родительский фрейм ячейки и показываем его
+                parent = rb.master
+                parent.grid()
+            else:
+                # Скрываем родительский фрейм ячейки
+                parent = rb.master
+                parent.grid_remove()
+        
+        # Восстанавливаем последний тип для этого подключения
+        last_type = self._last_type_per_connection.get(conn, "10")
+        if last_type in visible_types:
+            self._type_var.set(last_type)
+        else:
+            self._type_var.set(visible_types[0])
+        
+        # Обновляем подсветку активного типа
+        self._update_type_block_highlight()
+
+    def _update_type_block_highlight(self) -> None:
+        """
+        Подсвечивает ячейку активной радиокнопки типа радиатора.
+        Активная ячейка получает фон #c8c8c8, остальные — #dedede.
+        """
+        # Проверяем, что нужные ссылки уже созданы
+        if not hasattr(self, '_type_cell_frames') or not hasattr(self, '_type_radio_buttons'):
+            return
+        
+        active_type = self._type_var.get()
+        
+        for rt, cell_frame in self._type_cell_frames.items():
+            try:
+                if not cell_frame.winfo_exists():
+                    continue
+            except tk.TclError:
+                continue
+            
+            rb = self._type_radio_buttons.get(rt)
+            if rb is None:
+                continue
+            
+            if rt == active_type:
+                # Активная ячейка — тёмный фон и активный стиль
+                try:
+                    cell_frame.configure(bg='#c8c8c8')
+                except tk.TclError:
+                    pass
+                try:
+                    rb.configure(style="Active.Type.TRadiobutton")
+                except tk.TclError:
+                    pass
+            else:
+                # Неактивная ячейка — стандартный фон и базовый стиль
+                try:
+                    cell_frame.configure(bg='#dedede')
+                except tk.TclError:
+                    pass
+                try:
+                    rb.configure(style="Type.TRadiobutton")
+                except tk.TclError:
+                    pass
+
+    def _update_connection_block_highlight(self) -> None:
+        """
+        Подсвечивает блок (Classic или Hygiene), в котором активна радиокнопка.
+        Активный блок получает фон #c8c8c8, неактивный — #dedede.
+        """
+        # Проверяем, что нужные ссылки уже созданы
+        if not hasattr(self, '_classic_frame') or not hasattr(self, '_hygiene_frame'):
+            return
+        
+        conn = self._conn_var.get()
+        
+        # Определяем, какой блок активен
+        classic_connections = ("VK-правое", "VK-левое", "K-боковое")
+        hygiene_connections = ("HV-правое", "HV-левое", "H-боковое")
+        
+        if conn in classic_connections:
+            active_frame = self._classic_frame
+            inactive_frame = self._hygiene_frame
+            active_radios = self._classic_radio_buttons
+            inactive_radios = self._hygiene_radio_buttons
+            active_style = "Active.TRadiobutton"
+        elif conn in hygiene_connections:
+            active_frame = self._hygiene_frame
+            inactive_frame = self._classic_frame
+            active_radios = self._hygiene_radio_buttons
+            inactive_radios = self._classic_radio_buttons
+            active_style = "Active.Green.TRadiobutton"
+        else:
+            # Неизвестное подключение — ничего не делаем
+            return
+        
+        # Меняем фон активного блока (рекурсивно по всем вложенным Frame)
+        self._set_frame_bg_recursive(active_frame, '#c8c8c8')
+        
+        # Меняем фон неактивного блока обратно на стандартный
+        self._set_frame_bg_recursive(inactive_frame, '#dedede')
+        
+        # Переключаем стиль радиокнопок в активном блоке
+        for rb in active_radios:
+            try:
+                rb.configure(style=active_style)
+            except tk.TclError:
+                pass
+        
+        # Переключаем стиль радиокнопок в неактивном блоке на базовый
+        if active_frame is self._classic_frame:
+            # неактивный — Hygiene
+            for rb in inactive_radios:
+                try:
+                    rb.configure(style="Green.TRadiobutton")
+                except tk.TclError:
+                    pass
+        else:
+            # неактивный — Classic
+            for rb in inactive_radios:
+                try:
+                    rb.configure(style="TRadiobutton")
+                except tk.TclError:
+                    pass
+
+    def _set_frame_bg_recursive(self, widget, color: str) -> None:
+        """
+        Рекурсивно устанавливает фон color у всех tk.Frame внутри widget,
+        а также у самого widget. Виджеты ttk и tk.Entry не трогает.
+        """
+        try:
+            if not widget.winfo_exists():
+                return
+        except (tk.TclError, AttributeError):
+            return
+        
+        # Меняем фон, если это tk.Frame
+        if isinstance(widget, tk.Frame):
+            try:
+                widget.configure(bg=color)
+            except tk.TclError:
+                pass
+        
+        # Рекурсивно обходим дочерние виджеты
+        try:
+            for child in widget.winfo_children():
+                self._set_frame_bg_recursive(child, color)
+        except (tk.TclError, AttributeError):
+            pass
 
     def _create_image_tooltips(self) -> None:
         """Создаёт подсказки с картинками."""
@@ -487,7 +842,7 @@ class MainWindow:
             tooltip.withdraw()
 
     # ==================================================================
-    # УПРАВЛЕНИЕ ШРИФТОМ (НОВЫЕ МЕТОДЫ)
+    # УПРАВЛЕНИЕ ШРИФТОМ
     # ==================================================================
 
     def _increase_font_scale(self) -> None:
@@ -505,12 +860,14 @@ class MainWindow:
         Обновляет шрифты во всех окнах приложения.
         Вызывается после изменения масштаба.
         """
-        # Обновляем значение в окошке (два знака после запятой)
+        # Обновляем значение в окошке
         if hasattr(self, 'font_scale_var'):
             self.font_scale_var.set(f"{self.app.font_manager.scale:.2f}")
         
-        # ========== ИСПРАВЛЕНИЕ: пересоздаём стили с новым масштабом ==========
+        # Пересоздаём стили
         self._setup_styles()
+        
+        self._rebuild_all_ui()
         
         # Обновляем шрифты через FontManager
         self.app.font_manager.refresh_all_windows(self.root)
@@ -521,11 +878,90 @@ class MainWindow:
         # Обновляем шрифты в подсказке
         self._update_tooltip_fonts()
 
-        # Перестраиваем матрицу, чтобы применить новые размеры ячеек
+        # Перестраиваем матрицу
         self._build_matrix(self._conn_var.get(), self._type_var.get())
 
         # Отправляем событие об изменении масштаба
         bus.emit(Events.FONT_SCALE_CHANGED, scale=self.app.font_manager.scale)
+
+        # ========== ДОБАВЛЕНО: ОБНОВЛЯЕМ ШРИФТ КОНТЕКСТНОГО МЕНЮ В ПРЕДПРОСМОТРЕ ==========
+        if hasattr(self, '_preview_dialog') and self._preview_dialog:
+            try:
+                if hasattr(self._preview_dialog, '_update_context_menu_font'):
+                    self._preview_dialog._update_context_menu_font()
+            except Exception as e:
+                logger.debug(f"Ошибка обновления шрифта меню предпросмотра: {e}")
+    
+    def _update_all_labels_fonts_recursive(self, widget, font):
+        """Рекурсивно обходит виджеты и обновляет шрифт у всех ttk.Label."""
+        try:
+            if not widget.winfo_exists():
+                return
+        except (tk.TclError, AttributeError):
+            return
+        
+        # Проверяем, является ли виджет ttk.Label
+        try:
+            if isinstance(widget, ttk.Label):
+                widget.config(font=font)
+        except (tk.TclError, AttributeError):
+            pass
+        
+        # Рекурсивно обходим дочерние виджеты
+        try:
+            for child in widget.winfo_children():
+                self._update_all_labels_fonts_recursive(child, font)
+        except (tk.TclError, AttributeError):
+            pass
+        
+        # ========== ОБНОВЛЯЕМ СОХРАНЁННЫЕ ССЫЛКИ ==========
+        try:
+            if hasattr(self, '_scale_label') and self._scale_label and self._scale_label.winfo_exists():
+                self._scale_label.config(font=font)
+        except (tk.TclError, AttributeError):
+            pass
+        
+        try:
+            if hasattr(self, '_bracket_title_label') and self._bracket_title_label and self._bracket_title_label.winfo_exists():
+                self._bracket_title_label.config(font=font)
+        except (tk.TclError, AttributeError):
+            pass
+        
+        try:
+            if hasattr(self, '_radiator_discount_label') and self._radiator_discount_label and self._radiator_discount_label.winfo_exists():
+                self._radiator_discount_label.config(font=font)
+        except (tk.TclError, AttributeError):
+            pass
+        
+        try:
+            if hasattr(self, '_bracket_discount_label') and self._bracket_discount_label and self._bracket_discount_label.winfo_exists():
+                self._bracket_discount_label.config(font=font)
+        except (tk.TclError, AttributeError):
+            pass
+    
+    def _update_checkbutton_fonts_recursive(self, widget, font):
+        """Рекурсивно обходит виджеты и обновляет шрифт у чекбоксов."""
+        try:
+            if not widget.winfo_exists():
+                return
+        except (tk.TclError, AttributeError):
+            return
+        
+        # Проверяем, является ли виджет чекбоксом с нужным текстом
+        try:
+            if isinstance(widget, ttk.Checkbutton):
+                text = widget.cget('text')
+                if text == "Показывать параметры и стоимость":
+                    widget.config(font=font)
+        except (tk.TclError, AttributeError):
+            pass
+        
+        # Рекурсивно обходим дочерние виджеты
+        try:
+            for child in widget.winfo_children():
+                self._update_checkbutton_fonts_recursive(child, font)
+        except (tk.TclError, AttributeError):
+            pass
 
     def _update_tooltip_fonts(self) -> None:
         """Обновляет шрифты в существующей подсказке при изменении масштаба."""
@@ -560,163 +996,24 @@ class MainWindow:
     # ТИПЫ РАДИАТОРОВ (с запоминанием и миганием)
     # ==================================================================
 
-    def _update_type_buttons(self) -> None:
-        """Обновляет радиокнопки типов."""
-        for w in self._type_buttons_frame.winfo_children():
-            w.destroy()
-        self._type_radio_buttons.clear()
-
-        conn = self._conn_var.get()
-        if conn == "VK-левое":
-            types = ["10", "11", "30", "33"]
-        else:
-            types = ["10", "11", "20", "21", "22", "30", "33"]
-
-        # Восстанавливаем последний тип для этого подключения
-        last_type = self._last_type_per_connection.get(conn, "10")
-        if last_type in types:
-            self._type_var.set(last_type)
-        else:
-            self._type_var.set(types[0])
-
-        for rt in types:
-            rb = ttk.Radiobutton(
-                self._type_buttons_frame, text=rt, variable=self._type_var, value=rt,
-                command=self._on_type_changed
-            )
-            rb.pack(side="left", padx=5, pady=0)
-            self._type_radio_buttons[rt] = rb
 
     def _on_connection_changed(self) -> None:
         """Обработчик смены подключения."""
-        self._update_type_buttons()
-        self._build_matrix(self._conn_var.get(), self._type_var.get())
-        # Запускаем мигающую подсветку для ОБЕИХ радиокнопок (подключение + тип)
-        self._start_blinking_both()
-        bus.emit(Events.CONNECTION_CHANGED, connection=self._conn_var.get())
+        conn = self._conn_var.get()
+        self._update_type_buttons_visibility()
+        self._update_connection_block_highlight()
+        self._build_matrix(conn, self._type_var.get())
+        bus.emit(Events.CONNECTION_CHANGED, connection=conn)
 
     def _on_type_changed(self) -> None:
         """Обработчик смены типа — запоминает выбор."""
         conn = self._conn_var.get()
         rt = self._type_var.get()
         self._last_type_per_connection[conn] = rt
+        self._update_type_block_highlight()
         self._build_matrix(conn, rt)
-        # Запускаем мигающую подсветку для ОБЕИХ радиокнопок (подключение + тип)
-        self._start_blinking_both()
         bus.emit(Events.TYPE_CHANGED, rad_type=rt)
 
-    def _start_blinking_both(self) -> None:
-        """Собирает активные радиокнопки подключения и типа и запускает единое мигание."""
-        active_buttons = []
-
-        # 1. Активная радиокнопка подключения
-        active_conn = self._conn_var.get()
-        for rb in self._connection_radio_buttons:
-            try:
-                if rb.winfo_exists() and rb.cget("value") == active_conn:
-                    active_buttons.append(rb)
-            except tk.TclError:
-                pass
-
-        # 2. Активная радиокнопка типа
-        active_type = self._type_var.get()
-        for rt, rb in self._type_radio_buttons.items():
-            try:
-                if rb.winfo_exists() and rt == active_type:
-                    active_buttons.append(rb)
-            except tk.TclError:
-                pass
-
-        # Запускаем мигание для всех собранных кнопок
-        if active_buttons:
-            self._start_blinking(active_buttons, 'Highlighted.TRadiobutton', 'TRadiobutton', 1200)
-    
-    # ==================================================================
-    # МИГАЮЩАЯ ПОДСВЕТКА
-    # ==================================================================
-
-    def _start_blinking(self, widgets: List[ttk.Radiobutton],
-                        on_style: str, off_style: str, duration_ms: int) -> None:
-        """Мигает список виджетов, переключая стили."""
-        # ========== ИСПРАВЛЕНИЕ: сначала сбрасываем стиль ВСЕХ радиокнопок ==========
-        # Находим все радиокнопки подключения и типа и возвращаем им обычный стиль
-        all_radio_buttons = []
-        
-        # Добавляем все кнопки подключения
-        if hasattr(self, '_connection_radio_buttons'):
-            for rb in self._connection_radio_buttons:
-                try:
-                    if rb.winfo_exists():
-                        all_radio_buttons.append(rb)
-                except tk.TclError:
-                    pass
-        
-        # Добавляем все кнопки типа
-        if hasattr(self, '_type_radio_buttons'):
-            for rb in self._type_radio_buttons.values():
-                try:
-                    if rb.winfo_exists():
-                        all_radio_buttons.append(rb)
-                except tk.TclError:
-                    pass
-        
-        # Сбрасываем стиль всех кнопок на обычный
-        for rb in all_radio_buttons:
-            try:
-                if rb.winfo_exists():
-                    rb.config(style=off_style)
-            except tk.TclError:
-                pass
-        
-        # ========== ОСНОВНАЯ ЛОГИКА МИГАНИЯ ==========
-        blink_interval = 200  # миллисекунды между переключениями
-        num_cycles = (duration_ms // blink_interval) // 2  # количество полных циклов вкл/выкл
-        cycle_count = 0
-
-        def blink_on():
-            nonlocal cycle_count
-            if cycle_count >= num_cycles:
-                # Возвращаем обычный стиль всем кнопкам
-                for w in widgets:
-                    try:
-                        if w.winfo_exists():
-                            w.config(style=off_style)
-                    except tk.TclError:
-                        pass
-                return
-
-            # Включаем подсветку
-            for w in widgets:
-                try:
-                    if w.winfo_exists():
-                        w.config(style=on_style)
-                except tk.TclError:
-                    pass
-
-            self._blink_after_id = self.root.after(blink_interval, blink_off)
-
-        def blink_off():
-            nonlocal cycle_count
-            # Выключаем подсветку
-            for w in widgets:
-                try:
-                    if w.winfo_exists():
-                        w.config(style=off_style)
-                except tk.TclError:
-                    pass
-            cycle_count += 1
-            self._blink_after_id = self.root.after(blink_interval, blink_on)
-
-        # Отменяем предыдущее мигание, если было
-        if self._blink_after_id is not None:
-            try:
-                self.root.after_cancel(self._blink_after_id)
-            except ValueError:
-                pass
-            self._blink_after_id = None
-
-        # Запускаем новый цикл
-        blink_on()
 
     # ==================================================================
     # МАТРИЦА
@@ -920,16 +1217,76 @@ class MainWindow:
         ttk.Button(bottom, text="Предпросмотр", command=self._on_preview, width=15).pack(
             side="left", padx=5)
 
-        # ========== НОВАЯ КНОПКА "АНАЛОГИ" ==========
-        self._edit_correspondence_btn = ttk.Button(
-            bottom, 
-            text="Аналоги", 
-            command=self._on_edit_correspondence,
-            width=15,
-            state="disabled"
+        # ========== БЛОК МАСШТАБА (СЕГМЕНТИРОВАННЫЙ КОНТРОЛ) ==========
+        scale_container = ttk.Frame(bottom)
+        scale_container.pack(side="left", padx=5)
+
+        # Сохраняем ссылку на label «Масштаб:» — нужна для обновления шрифтов
+        self._scale_label = ttk.Label(scale_container, text="Масштаб:", font=default_font)
+        self._scale_label.pack(side="left", padx=(6, 6), pady=3)
+
+        # Единый фрейм с рамкой — визуально объединяет кнопки и поле
+        segment = tk.Frame(
+            scale_container,
+            relief="solid",
+            borderwidth=1,
+            bg='#263168'
         )
-        self._edit_correspondence_btn.pack(side="left", padx=5)
-        # ============================================
+        segment.pack(side="left", pady=3)
+
+        # Кнопка «−»
+        btn_minus = tk.Button(
+            segment,
+            text="−",
+            width=2,
+            font=default_font,
+            bg='#263168',
+            fg='white',
+            activebackground='#7E1A2F',
+            activeforeground='white',
+            relief='flat',
+            borderwidth=0,
+            highlightthickness=0,
+            cursor='hand2',
+            command=self._decrease_font_scale
+        )
+        btn_minus.pack(side="left")
+
+        # Поле со значением
+        self.font_scale_var = tk.StringVar(value=f"{self.app.font_manager.scale:.2f}")
+
+        scale_value_label = tk.Label(
+            segment,
+            textvariable=self.font_scale_var,
+            width=5,
+            bg='white',
+            fg='#263168',
+            font=default_font,
+            anchor="center",
+            relief='flat',
+            borderwidth=0,
+            highlightthickness=0
+        )
+        scale_value_label.pack(side="left", padx=0, pady=0, ipady=2)
+
+        # Кнопка «+»
+        btn_plus = tk.Button(
+            segment,
+            text="+",
+            width=2,
+            font=default_font,
+            bg='#263168',
+            fg='white',
+            activebackground='#7E1A2F',
+            activeforeground='white',
+            relief='flat',
+            borderwidth=0,
+            highlightthickness=0,
+            cursor='hand2',
+            command=self._increase_font_scale
+        )
+        btn_plus.pack(side="left")
+        # ================================================================
 
         ttk.Frame(bottom).pack(side="left", expand=True, fill="x")
 
@@ -957,37 +1314,51 @@ class MainWindow:
 
         ttk.Button(right_container, text="Сброс", command=self._on_reset, width=15).pack(
             side="right", padx=(5, 40))
-
+            
     def _create_bracket_discount_row(self, parent: ttk.Frame) -> None:
         """Блок кронштейнов и скидок."""
         default_font = self.app.font_manager.get_default_font()
         
-        ttk.Label(parent, text="Кронштейны и скидки:", font=default_font).pack(
-            side="left", padx=(0, 5), pady=5)
+        # ========== СОХРАНЯЕМ ССЫЛКУ НА LABEL "Кронштейны и скидки:" ==========
+        self._bracket_title_label = ttk.Label(parent, text="Кронштейны и скидки:", font=default_font)
+        self._bracket_title_label.pack(side="left", padx=(0, 5), pady=5)
 
         bracket_frame = tk.Frame(parent, relief="solid", borderwidth=1, bg='#dedede')
         bracket_frame.pack(side="left", padx=0, pady=0)
 
-        for b in ["Настенные", "Напольные", "Без"]:
-            full_text = f"{b} кронштейны" if b != "Без" else "Без кронштейнов"
-            ttk.Radiobutton(bracket_frame, text=full_text,
-                            variable=self.bracket_var, value=full_text
-                            ).pack(side="left", padx=5, pady=3)
+        # ========== ИЗМЕНЕНО: СОКРАЩЕНЫ НАЗВАНИЯ ==========
+        # Было: "Настенные кронштейны", "Напольные кронштейны", "Без кронштейнов"
+        # Стало: "Настенные", "Напольные", "Без"
+        bracket_options = [
+            ("Настенные", "Настенные кронштейны"),
+            ("Напольные", "Напольные кронштейны"),
+            ("Без", "Без кронштейнов"),
+        ]
+        
+        for display_text, full_value in bracket_options:
+            ttk.Radiobutton(
+                bracket_frame,
+                text=display_text,
+                variable=self.bracket_var,
+                value=full_value
+            ).pack(side="left", padx=5, pady=3)
 
-        ttk.Label(bracket_frame, text="Радиаторы, %:", width=12, font=default_font).pack(
-            side="left", padx=(10, 0), pady=3)
+        # ========== СОХРАНЯЕМ ССЫЛКИ НА LABEL "Радиаторы, %:" и "Кронштейны, %:" ==========
+        self._radiator_discount_label = ttk.Label(bracket_frame, text="Радиаторы, %:", width=12, font=default_font)
+        self._radiator_discount_label.pack(side="left", padx=(10, 0), pady=3)
+        
         ttk.Entry(bracket_frame, textvariable=self.radiator_discount_var, width=5,
                   validate="key",
                   validatecommand=(self.root.register(self._validate_number), '%P')
                   ).pack(side="left", padx=2, pady=3)
 
-        ttk.Label(bracket_frame, text="Кронштейны, %:", width=12, font=default_font).pack(
-            side="left", padx=(5, 0), pady=3)
+        self._bracket_discount_label = ttk.Label(bracket_frame, text="Кронштейны, %:", width=12, font=default_font)
+        self._bracket_discount_label.pack(side="left", padx=(5, 0), pady=3)
+        
         ttk.Entry(bracket_frame, textvariable=self.bracket_discount_var, width=5,
                   validate="key",
                   validatecommand=(self.root.register(self._validate_number), '%P')
                   ).pack(side="left", padx=2, pady=3)
-
     # ==================================================================
     # ОБРАБОТЧИКИ
     # ==================================================================
@@ -1086,11 +1457,15 @@ class MainWindow:
     # ==================================================================
 
     def _parse_qty(self, value) -> int:
-        """Парсит количество из строки (поддерживает 1+2)."""
+        """Парсит количество из строки (поддерживает 1+2 и пробелы как разделители тысяч)."""
         if not value or value == "":
             return 0
         import re
         str_value = str(value).strip()
+        
+        # Убираем все пробелы из строки (для чисел с разделителями тысяч)
+        str_value = re.sub(r'\s+', '', str_value)
+        
         if '+' in str_value:
             parts = str_value.split('+')
             total = 0
@@ -1130,11 +1505,7 @@ class MainWindow:
         if hasattr(self.app, '_last_correspondence_dialog'):
             self.app._last_correspondence_dialog = None
         
-        # 4. Деактивируем кнопку "Аналоги"
-        if hasattr(self, '_edit_correspondence_btn'):
-            self._edit_correspondence_btn.config(state="disabled")
-        
-        # 5. Закрытие всех вспомогательных окон
+        # 4. Закрытие всех вспомогательных окон
         self._close_all_child_windows()
         
         # 6. Перестроение матрицы
@@ -1166,10 +1537,6 @@ class MainWindow:
         # Очистка сохранённых данных в диалоге (если есть)
         if hasattr(self, '_saved_correspondence_data'):
             self._saved_correspondence_data = None
-        
-        # Деактивируем кнопку "Аналоги"
-        if hasattr(self, '_edit_correspondence_btn'):
-            self._edit_correspondence_btn.config(state="disabled")
         
         logger.info("Кэш данных таблицы соответствия полностью очищен")
     
@@ -1406,10 +1773,6 @@ class MainWindow:
                 if hasattr(self.app, '_last_correspondence_dialog'):
                     self.app._last_correspondence_dialog = None
                 # ================================================================
-                
-                # Деактивируем кнопку "Аналоги"
-                if hasattr(self, '_edit_correspondence_btn'):
-                    self._edit_correspondence_btn.config(state="disabled")
                 
                 # Обновляем матрицу
                 self._build_matrix(self._conn_var.get(), self._type_var.get())
@@ -2399,7 +2762,9 @@ class MainWindow:
                 continue
             
             try:
-                qty = int(float(qty_str.replace(',', '.')))
+                # Удаляем все пробелы из строки (для чисел с разделителями тысяч)
+                cleaned_qty = re.sub(r'\s+', '', str(qty_str))
+                qty = int(float(cleaned_qty.replace(',', '.')))
                 if qty <= 0:
                     continue
             except (ValueError, TypeError):
@@ -2620,7 +2985,9 @@ class MainWindow:
                 continue
 
             try:
-                qty = int(float(qty_str.replace(',', '.')))
+                # Удаляем все пробелы из строки (для чисел с разделителями тысяч)
+                cleaned_qty = re.sub(r'\s+', '', str(qty_str))
+                qty = int(float(cleaned_qty.replace(',', '.')))
                 if qty <= 0:
                     continue
             except (ValueError, TypeError):
@@ -2723,12 +3090,15 @@ class MainWindow:
                 continue
             
             try:
+                # Удаляем все пробелы из строки (для чисел с разделителями тысяч)
+                cleaned_qty = re.sub(r'\s+', '', str(qty_str))
+                
                 # Пробуем извлечь целое число из количества
-                qty_match = re.search(r'(\d+)', str(qty_str).replace(',', '.'))
+                qty_match = re.search(r'(\d+)', cleaned_qty.replace(',', '.'))
                 if qty_match:
                     qty = int(qty_match.group(1))
                 else:
-                    qty = int(float(qty_str.replace(',', '.')))
+                    qty = int(float(cleaned_qty.replace(',', '.')))
                 
                 if qty <= 0:
                     continue
@@ -2958,6 +3328,8 @@ class MainWindow:
         rad_type = None
         height = None
         length = None
+        connection = None  # ========== НОВОЕ: извлекаем подключение ==========
+        
         try:
             match = re.search(r'/(\d{2})/(\d{3,4})/(\d{3,4})', name)
             if match:
@@ -2979,6 +3351,26 @@ class MainWindow:
                         if tm:
                             rad_type = tm.group(1)
                             break
+            
+            # ========== НОВОЕ: определяем подключение ==========
+            name_lower = name.lower()
+            if 'ventil hygiene (hv)' in name_lower:
+                if ' la' in name_lower or ' l ' in name_lower or name_lower.endswith(' la'):
+                    connection = "HV-левое"
+                else:
+                    connection = "HV-правое"
+            elif 'hygiene (h)' in name_lower:
+                connection = "H-боковое"
+            elif 'vk' in name_lower:
+                if ' la' in name_lower or ' l ' in name_lower or name_lower.endswith(' la'):
+                    connection = "VK-левое"
+                else:
+                    connection = "VK-правое"
+            elif 'k-profil' in name_lower or 'k-' in name_lower:
+                connection = "K-боковое"
+            else:
+                connection = "VK-правое"
+                
         except Exception:
             pass
 
@@ -3031,14 +3423,16 @@ class MainWindow:
 
         # Обработка кронштейнов
         bracket_choice = self.bracket_var.get()
-        if bracket_choice != "Без кронштейнов" and rad_type and height and length:
+        if bracket_choice != "Без кронштейнов" and rad_type and height and length and connection:
             try:
                 from nextt.core.brackets import BracketsCalculator
+                # ========== ИСПРАВЛЕНИЕ: передаём connection ==========
                 brackets_list = BracketsCalculator.calculate(
                     radiator_type=rad_type,
                     length=length,
                     height=height,
                     bracket_type=bracket_choice,
+                    connection=connection,  # <-- НОВОЕ
                     quantity=qty_radiators,
                 )
                 if brackets_list:
@@ -3109,14 +3503,25 @@ class MainWindow:
         tw = self._tooltip_window.winfo_reqwidth()
         th = self._tooltip_window.winfo_reqheight()
 
+        # Высота панели задач (снизу экрана)
+        try:
+            from nextt.utils.window_manager import get_taskbar_height
+            taskbar_h = get_taskbar_height(self._tooltip_window)
+        except Exception:
+            taskbar_h = 0
+
         x = pointer_x + 15
         y = pointer_y + 15
 
         if x + tw > screen_w:
             x = pointer_x - tw - 15
-        if y + th > screen_h:
+
+        # Нижняя граница рабочей области (с учётом панели задач)
+        bottom_limit = screen_h - taskbar_h - 10
+
+        if y + th > bottom_limit:
             y = pointer_y - th - 15
-        if y < 0:
+        if y < 10:
             y = 10
 
         self._tooltip_window.wm_geometry(f"+{x}+{y}")

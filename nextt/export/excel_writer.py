@@ -63,7 +63,7 @@ class ExcelWriter:
         ws.title = "Спецификация"
 
         headers = [
-            "№", "Артикул", "Наименование", "Мощность, Вт",
+            "№", "Артикул", "Наименование", "Мощность, Вт", "Вид монтажа",
             "Цена, руб (с НДС)", "Скидка, %",
             "Цена со скидкой, руб (с НДС)", "Кол-во",
             "Сумма, руб (с НДС)"
@@ -82,11 +82,24 @@ class ExcelWriter:
             is_bracket = "Кронштейн" in str(row.get("Наименование", ""))
             power_value = "" if is_bracket else row.get("Мощность, Вт", "")
 
+            # Вид монтажа — только у радиаторов
+            if is_bracket:
+                mount_value = ""
+            else:
+                raw_mount = str(row.get("Тип монтажа", "")).strip().lower()
+                if raw_mount == "настенный":
+                    mount_value = "На стену"
+                elif raw_mount == "напольный":
+                    mount_value = "На пол"
+                else:
+                    mount_value = ""
+
             ws.append([
                 i - 1,
                 str(row.get("Артикул", "")),
                 row.get("Наименование", ""),
                 power_value,
+                mount_value,
                 float(row.get("Цена, руб (с НДС)", 0)),
                 float(row.get("Скидка, %", 0)),
                 float(row.get("Цена со скидкой, руб (с НДС)", 0)),
@@ -98,12 +111,10 @@ class ExcelWriter:
                 cell = ws.cell(row=i, column=col)
                 cell.font = self.DATA_FONT
                 cell.border = self.THIN_BORDER
-                if col in [5, 7, 9]:
+                if col in [6, 8, 10]:
                     cell.number_format = self.MONEY_FORMAT
                     cell.alignment = self.ALIGN_CENTER
-                elif col == 4:
-                    cell.alignment = self.ALIGN_CENTER
-                elif col in [1, 6, 8]:
+                elif col in [1, 4, 5, 7, 9]:
                     cell.alignment = self.ALIGN_CENTER
                 else:
                     cell.alignment = self.ALIGN_LEFT
@@ -121,7 +132,7 @@ class ExcelWriter:
             if "Кронштейн" in str(row.get("Наименование", ""))
         )
 
-        ws.append(["Итого", "", "", "", "", "", "",
+        ws.append(["Итого", "", "", "", "", "", "", "",
                    f"{total_qty_rad}/{total_qty_br}", total_sum])
 
         for col in range(1, len(headers) + 1):
@@ -129,7 +140,7 @@ class ExcelWriter:
             cell.font = self.BOLD_FONT
             cell.border = self.THIN_BORDER
             cell.alignment = self.ALIGN_CENTER
-            if col in [5, 7, 9]:
+            if col in [6, 8, 10]:
                 cell.number_format = self.MONEY_FORMAT
 
         # Расчёт суммарного веса и объёма радиаторов (без кронштейнов)
@@ -140,14 +151,14 @@ class ExcelWriter:
 
         # Строка с весом
         ws.append([f"Суммарный вес радиаторов без учета упаковки и кронштейнов - {total_weight} кг."])
-        ws.merge_cells(start_row=total_row + 2, start_column=1, end_row=total_row + 2, end_column=9)
+        ws.merge_cells(start_row=total_row + 2, start_column=1, end_row=total_row + 2, end_column=10)
         cell = ws.cell(row=total_row + 2, column=1)
         cell.font = self.DATA_FONT
         cell.alignment = self.ALIGN_LEFT
 
         # Строка с объёмом
         ws.append([f"Суммарный объем радиаторов без учета упаковки и кронштейнов - {total_volume} м3."])
-        ws.merge_cells(start_row=total_row + 3, start_column=1, end_row=total_row + 3, end_column=9)
+        ws.merge_cells(start_row=total_row + 3, start_column=1, end_row=total_row + 3, end_column=10)
         cell = ws.cell(row=total_row + 3, column=1)
         cell.font = self.DATA_FONT
         cell.alignment = self.ALIGN_LEFT
@@ -158,35 +169,32 @@ class ExcelWriter:
         # Подпись с использованием переданного имени программы
         ws.append([f"Подготовлено в {program_name}"])
         ws.merge_cells(start_row=total_row + 5, start_column=1,
-                       end_row=total_row + 5, end_column=9)
+                       end_row=total_row + 5, end_column=10)
         cell = ws.cell(row=total_row + 5, column=1)
         cell.font = self.ITALIC_FONT
         cell.alignment = self.ALIGN_LEFT
 
         # Ширина столбцов
-        widths = {'A': 5, 'B': 12, 'C': 50, 'D': 15, 'E': 20,
-                  'F': 10, 'G': 40, 'H': 12, 'I': 20}
+        widths = {'A': 5, 'B': 12, 'C': 50, 'D': 15, 'E': 14,
+                  'F': 20, 'G': 10, 'H': 40, 'I': 12, 'J': 20}
         for col_letter, width in widths.items():
             ws.column_dimensions[col_letter].width = width
 
         # ================================================================
-        # Лист "Таблица соответствия" (если есть данные)
+        # Лист "Таблица соответствия" (без изменений)
         # ================================================================
         if correspondence_data is not None and not correspondence_data.empty:
-            # Удаляем существующий лист "Таблица соответствия", если он есть
             if "Таблица соответствия" in wb.sheetnames:
                 std = wb["Таблица соответствия"]
                 wb.remove(std)
-            
+
             ws_corr = wb.create_sheet("Таблица соответствия")
 
-            # Обрабатываем данные — добавляем мощность
             processed_data = []
             for _, row in correspondence_data.iterrows():
                 meteor_art = str(row.get('Артикул LaggarTT', '')).strip()
                 power_value = self._find_power_by_article(meteor_art)
 
-                # Пытаемся найти количество в разных возможных столбцах
                 qty_value = 0
                 if 'Кол-во' in row:
                     qty_value = row.get('Кол-во', 0)
@@ -194,8 +202,7 @@ class ExcelWriter:
                     qty_value = row.get('Количество', 0)
                 else:
                     qty_value = row.get(list(row.index)[1], 0) if len(row.index) > 1 else 0
-                
-                # Пытаемся найти наименование в разных возможных столбцах
+
                 original_name = ''
                 if 'Наименование' in row:
                     original_name = row.get('Наименование', '')
@@ -203,8 +210,7 @@ class ExcelWriter:
                     original_name = row.get('Оригинальное наименование', '')
                 else:
                     original_name = row.get(list(row.index)[0], '') if len(row.index) > 0 else ''
-                
-                # Пытаемся найти наименование LaggarTT
+
                 meteor_name = ''
                 if 'Наименование LaggarTT' in row:
                     meteor_name = row.get('Наименование LaggarTT', '')
@@ -228,14 +234,12 @@ class ExcelWriter:
             ]
             ws_corr.append(corr_headers)
 
-            # Стили заголовков листа соответствия
             for col in range(1, len(corr_headers) + 1):
                 cell = ws_corr.cell(row=1, column=col)
                 cell.font = self.HEADER_FONT
                 cell.alignment = self.ALIGN_CENTER
                 cell.border = self.THIN_BORDER
 
-            # Данные листа соответствия
             total_qty_corr = 0
 
             for i, row_data in enumerate(processed_data, 2):
@@ -263,13 +267,12 @@ class ExcelWriter:
                     else:
                         cell.alignment = self.ALIGN_LEFT
 
-            # Добавляем итоговую строку
             total_row_corr = len(processed_data) + 2
             ws_corr.append(["Итого", "", "", "", ""])
             ws_corr.cell(row=total_row_corr, column=2, value=total_qty_corr)
 
             RED_FONT = Font(name='Calibri', size=11, bold=True, color="FF0000")
-            
+
             if total_qty_corr != total_qty_rad:
                 cell = ws_corr.cell(row=total_row_corr, column=2)
                 cell.font = RED_FONT
@@ -291,10 +294,9 @@ class ExcelWriter:
                     else:
                         cell.alignment = self.ALIGN_LEFT
 
-            ws_corr.merge_cells(start_row=total_row_corr, start_column=1, 
+            ws_corr.merge_cells(start_row=total_row_corr, start_column=1,
                                 end_row=total_row_corr, end_column=1)
 
-            # Автоподбор ширины столбцов
             for col_idx, column_name in enumerate(corr_headers, 1):
                 max_length = len(str(column_name))
                 column_letter = get_column_letter(col_idx)

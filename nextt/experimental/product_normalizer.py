@@ -1,8 +1,7 @@
 """
 product_normalizer.py - Извлечение параметров товара из текста
 Универсальный парсер для любых форматов названий.
-Версия 8.2 - добавлена поддержка комплектующих к радиаторам (решетки, клипсы, панели)
-и исправлено определение "фланец" как дымохода.
+Версия 8.3 - улучшено распознавание котлов без явных ключевых слов
 """
 import re
 from typing import Dict, Optional, Tuple, List
@@ -28,28 +27,28 @@ class ProductParams:
     # Для дымоходов
     size: str = ""          # DN60/100, DN80/125
     article_code: str = ""  # WT60100-01LN
-    is_condensing: bool = False  # True если для конденсационного котла (есть PP или LN)
+    is_condensing: bool = False
 
     # Для бойлеров
-    volume: Optional[int] = None  # 150, 200, 300
+    volume: Optional[int] = None
 
     # Для комплектов
-    kit_type: str = ""      # сжиженный газ, перенастройка
+    kit_type: str = ""
 
     # Для радиаторов
-    radiator_type: str = ""  # 10, 11, 20, 21, 22, 30, 33
+    radiator_type: str = ""
     height: Optional[int] = None
     length: Optional[int] = None
-    connection: str = ""     # VK, K
+    connection: str = ""
 
     # Для кронштейнов
     bracket_article: str = ""
 
-    # Для комплектующих к радиаторам (НОВОЕ)
-    accessory_type: str = ""        # решетка, панель, клипса, заглушка, кран, колпачок, регулятор, адаптер
-    accessory_subtype: str = ""     # короткая/длинная (для клипс)
-    accessory_brand: str = ""       # laggartt, meteor (для клипс)
-    types_list: List[str] = field(default_factory=list)  # список типов для решёток/панелей ["10", "11", "21"]
+    # Для комплектующих к радиаторам
+    accessory_type: str = ""
+    accessory_subtype: str = ""
+    accessory_brand: str = ""
+    types_list: List[str] = field(default_factory=list)
 
     # Общее
     article: str = ""
@@ -102,7 +101,7 @@ class ProductParams:
             if self_model_norm == other_model_norm:
                 score += 0.20
                 
-                # Совпадение суффикса - ВАЖНЫЙ БОНУС!
+                # Совпадение суффикса
                 if self.model_suffix and other.model_suffix:
                     if self.model_suffix.upper() == other.model_suffix.upper():
                         score += 0.15
@@ -147,7 +146,7 @@ class ProductParams:
             if self.conn_type == other.conn_type:
                 score += 0.10
         
-        # Wi-Fi - увеличенный вес
+        # Wi-Fi
         max_score += 0.10
         if self.has_wifi == other.has_wifi:
             score += 0.10
@@ -220,45 +219,37 @@ class ProductParams:
                 if self.bracket_article == other.bracket_article:
                     score += 0.30
         
-        # ========== ДЛЯ КОМПЛЕКТУЮЩИХ К РАДИАТОРАМ (НОВОЕ) ==========
+        # Для комплектующих к радиаторам
         if self.product_type == 'radiator_accessory' and other.product_type == 'radiator_accessory':
-            # Тип комплектующего (решетка/панель/клипса и т.д.)
             if self.accessory_type and other.accessory_type:
                 max_score += 0.25
                 if self.accessory_type == other.accessory_type:
                     score += 0.25
             
-            # Список типов (для решёток и панелей)
             if self.types_list and other.types_list:
                 max_score += 0.20
-                # Сравниваем как множества (порядок не важен)
                 if set(self.types_list) == set(other.types_list):
                     score += 0.20
                 elif set(self.types_list) & set(other.types_list):
-                    # Частичное совпадение
                     intersection = len(set(self.types_list) & set(other.types_list))
                     union = len(set(self.types_list) | set(other.types_list))
                     score += 0.20 * (intersection / union) if union > 0 else 0
             
-            # Длина (для решёток)
             if self.length and other.length:
                 max_score += 0.20
                 if self.length == other.length:
                     score += 0.20
             
-            # Высота (для панелей)
             if self.height and other.height:
                 max_score += 0.20
                 if self.height == other.height:
                     score += 0.20
             
-            # Бренд клипсы
             if self.accessory_brand and other.accessory_brand:
                 max_score += 0.15
                 if self.accessory_brand == other.accessory_brand:
                     score += 0.15
             
-            # Подтип (короткая/длинная)
             if self.accessory_subtype and other.accessory_subtype:
                 max_score += 0.15
                 if self.accessory_subtype == other.accessory_subtype:
@@ -298,19 +289,21 @@ class ProductNormalizer:
         r'\b(10|12|14|18|20|24|26|28|30|32|35|36|45|60|80)\b',
     ]
 
-    # Паттерны для моделей котлов (общие, без жёсткой привязки к конкретным)
+    # Паттерны для моделей котлов - универсальные, с учётом пробелов и дефисов
     MODEL_PATTERNS = [
-        # Буква + 2 цифры, возможно с суффиксом (B30, B30RN, C11, M30A, T2, Q3)
+        # Буква + пробел + 1-2 цифры (B 30, C 11) - для пользовательских запросов
+        r'\b([A-Z])\s+([0-9]{1,2})([A-Z]{1,3})?\b',
+        # Буква + 1-2 цифры (B30, C11) - для базы данных
         r'\b([A-Z][0-9]{1,2})([A-Z]{1,3})?\b',
         # Модели с дефисом (B-30, C-11)
         r'\b([A-Z])[-]?([0-9]{1,2})([A-Z]{1,3})?\b',
-        # ГАЗ 6000 и аналоги (цифры в названии)
-        r'\b([A-Z]{2,4})\s*([0-9]{3,4})([A-Z]{1,3})?\b',
         # T2, Q3 (буква + одна цифра)
         r'\b([TQ])([0-9]{1})([A-Z]{1,3})?\b',
+        # M30, B20 и т.д. (буква + 2 цифры)
+        r'\b([A-Z]{1,2})([0-9]{2})([A-Z]{1,3})?\b',
     ]
 
-    # Допустимые суффиксы для котлов (в порядке приоритета)
+    # Допустимые суффиксы для котлов
     VALID_SUFFIXES = {'RN', 'A', 'M', 'T', 'Q', 'H', 'C', 'RNW', 'RNM', 'RNH', 'RNC', 'LA', 'RA', 'RE', 'LE'}
 
     def __init__(self):
@@ -346,15 +339,10 @@ class ProductNormalizer:
         
         remaining = text[start_pos:]
         
-        # Паттерны для поиска суффикса (в порядке приоритета)
         patterns = [
-            # RN сразу после цифр: GAZ6000RN
             r'^([A-Z]{1,3})(?=\s|$|[^A-Z])',
-            # Пробел и буквы: GAZ 6000 RN
             r'^\s+([A-Z]{1,3})(?:\s|$)',
-            # Дефис и буквы: GAZ6000-RN
             r'^-([A-Z]{1,3})(?:\s|$)',
-            # Пробел или дефис, затем буквы
             r'^[\s-]*([A-Z]{1,3})(?:\s|$)',
         ]
         
@@ -362,12 +350,39 @@ class ProductNormalizer:
             match = re.search(pattern, remaining, re.IGNORECASE)
             if match:
                 suffix = match.group(1).upper()
-                # Проверяем, что это допустимый суффикс
                 if suffix in self.VALID_SUFFIXES or len(suffix) <= 3 and suffix.isalpha():
-                    self._log(f"    Найден суффикс: '{suffix}' после модели {model_base}")
                     return suffix
         
         return ""
+
+    def _extract_power_from_text(self, text: str) -> Optional[int]:
+        """Извлекает мощность из текста любым способом."""
+        # Ищем в формате "24 C" или "24H"
+        match = re.search(r'\b(\d{2})\s*[CH]\b', text, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+        
+        # Ищем "24 кВт"
+        match = re.search(r'(\d{2})\s*квт', text, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+        
+        # Ищем любое число из списка мощностей
+        for pattern in self.POWER_PATTERNS:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return int(match.group(1))
+        
+        return None
+
+    def _extract_conn_type_from_text(self, text: str) -> str:
+        """Извлекает тип подключения C/H."""
+        text_upper = text.upper()
+        if re.search(r'\bC\b', text_upper) or re.search(r'\bС\b', text_upper):
+            return 'C'
+        if re.search(r'\bH\b', text_upper) or re.search(r'\bН\b', text_upper):
+            return 'H'
+        return ''
 
     def extract(self, text: str) -> ProductParams:
         """
@@ -388,18 +403,16 @@ class ProductNormalizer:
         # 2. Извлекаем бренд
         params.brand = self._extract_brand(text)
         
-        # 3. Ищем артикул в любом тексте (для запчастей и датчиков)
+        # 3. Ищем артикул
         article_match = re.search(r'\b([A-Z]{2}\d{8})\b', text_upper)
         if article_match:
             params.article = article_match.group(1)
-            params.product_type = 'part'  # или 'sensor' если есть слово датчик
-            self._log(f"    Найден артикул: {params.article}")
         
         # 4. Для котлов
         if params.product_type == 'boiler':
             self._extract_boiler_params(params, text, text_upper, text_normalized, text_normalized_lower)
         
-        # 5. Для дымоходов (включая фланцы)
+        # 5. Для дымоходов
         elif params.product_type == 'chimney':
             self._extract_chimney_params(params, text_upper)
         
@@ -415,80 +428,137 @@ class ProductNormalizer:
         elif params.product_type == 'radiator':
             self._extract_radiator_params(params, text)
         
-        # 9. Для кронштейнов 
+        # 9. Для кронштейнов
         elif params.product_type == 'bracket':
             self._extract_bracket_params(params, text_upper)
         
-        # 10. Для комплектующих к радиаторам (НОВОЕ)
+        # 10. Для комплектующих к радиаторам
         elif params.product_type == 'radiator_accessory':
             self._extract_radiator_accessory_params(params, text)
         
-        # 11. Для датчиков и запчастей - уже есть артикул
+        # 11. Для датчиков и запчастей
         elif params.product_type in ['sensor', 'part']:
-            # Если артикул не найден, пробуем извлечь
             if not params.article:
                 article_match = re.search(r'\b([A-Z]{2}\d{8})\b', text_upper)
                 if article_match:
                     params.article = article_match.group(1)
-                    self._log(f"    Найден артикул для запчасти: {params.article}")
         
         return params
 
     def _extract_product_type(self, text: str) -> str:
-        """Определяет тип товара по ключевым словам или паттернам."""
+        """
+        Определяет тип товара по ключевым словам или паттернам.
+        Универсальный — распознаёт даже без явных ключевых слов.
+        """
         text_lower = text.lower()
+        text_normalized = self._normalize(text)
         
-        # ========== КОМПЛЕКТУЮЩИЕ К РАДИАТОРАМ (НОВОЕ, ПРОВЕРЯЕМ ПЕРВЫМИ) ==========
+        # ========== КОМПЛЕКТУЮЩИЕ К РАДИАТОРАМ ==========
         if any(x in text_lower for x in ['решетка', 'решётка', 'защитная решетка']):
             return 'radiator_accessory'
         if any(x in text_lower for x in ['боковая панель', 'панель боковая']):
             return 'radiator_accessory'
-        if any(x in text_lower for x in ['клипса']) and any(x in text_lower for x in ['laggartt', 'meteor', 'бренд']):
+        if 'клипса' in text_lower:
             return 'radiator_accessory'
-        if any(x in text_lower for x in ['заглушка']) and any(x in text_lower for x in ['латунная', 'декоративная', 'панели']):
+        if 'заглушка' in text_lower:
             return 'radiator_accessory'
         if any(x in text_lower for x in ['воздушный кран', 'кран воздушный']):
             return 'radiator_accessory'
-        if any(x in text_lower for x in ['колпачок', 'регулятор']) and 'af' in text_lower:
+        if 'колпачок' in text_lower:
+            return 'radiator_accessory'
+        if 'регулятор' in text_lower and 'af' in text_lower:
             return 'radiator_accessory'
         if 'адаптер' in text_lower and 'решётк' in text_lower:
             return 'radiator_accessory'
-        if 'набор' in text_lower and any(x in text_lower for x in ['клипс', 'адаптер']):
-            return 'radiator_accessory'
         
-        # ========== ФЛАНЕЦ = ДЫМОХОД (НОВОЕ) ==========
+        # ========== ФЛАНЕЦ = ДЫМОХОД ==========
         if 'фланец' in text_lower:
             return 'chimney'
         
+        # ========== КОТЛЫ ==========
+        # Явные ключевые слова
         if any(x in text_lower for x in ['котел', 'котёл']):
             return 'boiler'
+        
+        # 6000 = ГАЗ 6000 = котёл (даже без слова "ГАЗ")
+        if re.search(r'\b6000\b', text_lower):
+            return 'boiler'
+        
+        # GAZ 6000 (с разными вариантами написания)
+        if re.search(r'(газ|gaz)\s*6000', text_lower):
+            return 'boiler'
+        
+        # ========== МОДЕЛИ КОТЛОВ (С ПРОБЕЛОМ И БЕЗ) ==========
+        # ИСПРАВЛЕНИЕ: ищем И русскую С, И латинскую C
+        # Паттерн: буква (B, C, M, T, Q) + пробел + 1-2 цифры
+        # [BСMВTQ] - здесь С - русская
+        # [BCMTQ] - здесь C - латинская
+        # Используем [BСCMВTQ] - ищем обе буквы
+        
+        # Проверяем паттерн: буква + пробел + цифры (C 11, B 30)
+        if re.search(r'\b[BСCMВTQ]\s*[0-9]{1,2}\b', text_normalized, re.IGNORECASE):
+            # Если есть признаки радиатора (высота/длина) — это радиатор
+            if re.search(r'\d{3,4}[/-]\d{3,4}', text) or 'profil' in text_lower:
+                return 'radiator'
+            return 'boiler'
+        
+        # Проверяем паттерн: буква + цифры без пробела (C11, B30)
+        if re.search(r'\b[BСCMВTQ][0-9]{1,2}\b', text_normalized, re.IGNORECASE):
+            if re.search(r'\d{3,4}[/-]\d{3,4}', text) or 'profil' in text_lower:
+                return 'radiator'
+            return 'boiler'
+        
+        # GAZ6000 слитно
+        if re.search(r'gaz6000', text_normalized, re.IGNORECASE):
+            return 'boiler'
+        
+        # ========== БОЙЛЕРЫ ==========
         if any(x in text_lower for x in ['бойлер', 'водонагреватель']):
             return 'water_heater'
-        if any(x in text_lower for x in ['дымоход', 'chimney', 'wt', 'dn']):
+        if re.search(r'iht\s*g\s*\d{3}', text_lower):
+            return 'water_heater'
+        
+        # ========== ДЫМОХОДЫ ==========
+        if any(x in text_lower for x in ['дымоход', 'chimney']):
             return 'chimney'
+        if re.search(r'dn\d{2,3}/\d{2,3}', text_lower):
+            return 'chimney'
+        if re.search(r'wt\d{5,6}-\d+', text_lower):
+            return 'chimney'
+        
+        # ========== КОМПЛЕКТЫ ==========
         if any(x in text_lower for x in ['комплект', 'перенастройка', 'форсунка', 'lpg', 'сжиж']):
             return 'conversion_kit'
-        if any(x in text_lower for x in ['радиатор', 'profil', 'kermi']):
-            return 'radiator'
-        if any(x in text_lower for x in ['кронштейн', 'bracket']):
-            return 'bracket'
-        if any(x in text_lower for x in ['датчик', 'температуры', 'ntc']):
-            return 'sensor'
-        if any(x in text_lower for x in ['вентилятор', 'плата', 'клапан', 'теплообменник', 'насос', 'горелка']):
-            return 'part'
+        if re.search(r'301\d{8}', text):
+            return 'conversion_kit'
         
-        if re.search(r'[BCMВСTQ][0-9]{1,2}', text, re.IGNORECASE):
-            return 'boiler'
-        if re.search(r'(ГАЗ|GAZ)\s*6000', text, re.IGNORECASE):
-            return 'boiler'
-        if re.search(r'DN\d{2,3}/\d{2,3}', text, re.IGNORECASE):
-            return 'chimney'
-        if re.search(r'WT\d{5,6}-\d+', text, re.IGNORECASE):
-            return 'chimney'
+        # ========== РАДИАТОРЫ ==========
+        if any(x in text_lower for x in ['радиатор', 'profil', 'kermi', 'purmo', 'buderus', 'evra', 'oasis']):
+            return 'radiator'
         if re.search(r'\d{2}[/-]\d{3,4}[/-]\d{3,4}', text):
             return 'radiator'
+        if re.search(r'\d{2}\s*[-]\s*\d{3,4}\s*[-]\s*\d{3,4}', text):
+            return 'radiator'
+        
+        # ========== КРОНШТЕЙНЫ ==========
+        if any(x in text_lower for x in ['кронштейн', 'bracket']):
+            return 'bracket'
         if re.search(r'[КK]\d{1,2}\.\d{1,4}', text):
             return 'bracket'
+        if re.search(r'[КK][НH][СC]\d{3,4}', text):
+            return 'bracket'
+        if re.search(r'pln\d+', text_lower):
+            return 'bracket'
+        
+        # ========== ДАТЧИКИ ==========
+        if any(x in text_lower for x in ['датчик', 'температуры', 'ntc']):
+            return 'sensor'
+        
+        # ========== ЗАПЧАСТИ ==========
+        if any(x in text_lower for x in ['вентилятор', 'плата', 'клапан', 'теплообменник', 'насос', 'горелка']):
+            return 'part'
+        if re.search(r'[A-Z]{2}\d{8}', text):
+            return 'part'
         
         return 'other'
 
@@ -503,88 +573,130 @@ class ProductNormalizer:
             return 'devotion'
         return ''
 
-    def _extract_boiler_params(self, params: ProductParams, text: str, text_upper: str, 
+    def _extract_boiler_params(self, params: ProductParams, text: str, text_upper: str,
                                 text_normalized: str, text_normalized_lower: str):
         """
-        Извлекает параметры котла с поддержкой суффиксов (RN и т.д.).
+        Извлекает параметры котла с поддержкой любых форматов.
+        Универсальный — работает с B30, B 30, GAZ6000, 6000 и т.д.
         """
         params.has_wifi = any(x in text.lower() for x in ['wi-fi', 'wifi', 'вайфай', 'вафай'])
         
-        # ========== ИЩЕМ МОДЕЛЬ И СУФФИКС ==========
         model_base = ""
         suffix = ""
         model_end_pos = 0
         
-        # Специальная обработка для ГАЗ 6000
-        gaz_match = re.search(r'(ГАЗ|GAZ)\s*6000', text_normalized, re.IGNORECASE)
-        if gaz_match:
+        # ========== 1. 6000 (без "ГАЗ") ==========
+        if re.search(r'\b6000\b', text_normalized, re.IGNORECASE) and \
+           not re.search(r'(ГАЗ|GAZ)\s*6000', text_normalized, re.IGNORECASE):
             model_base = 'GAZ6000'
-            model_end_pos = gaz_match.end()
-            after_model = text_normalized[model_end_pos:]
-            
-            # Ищем тип подключения и суффикс в строке пользователя
-            # Паттерны: "24 C RN", "24C RN", "24RN", "24 H RN"
-            patterns = [
-                r'(\d*)\s*([CH])\s+([A-Z]{1,3})\b',   # 24 C RN
-                r'(\d*)([CH])\s+([A-Z]{1,3})\b',      # 24C RN
-                r'(\d*)([A-Z]{1,3})\b',                # 24RN
-            ]
-            
-            for pattern in patterns:
-                match = re.search(pattern, after_model, re.IGNORECASE)
-                if match:
-                    groups = match.groups()
-                    if len(groups) >= 2:
-                        # Определяем тип подключения
-                        if groups[1] in ['C', 'H']:
-                            params.conn_type = groups[1]
-                            if len(groups) >= 3 and groups[2]:
-                                suffix = groups[2].upper()
-                        else:
-                            # Возможно суффикс без явного типа
-                            potential_suffix = groups[1].upper()
-                            if potential_suffix in ['RN', 'RNW', 'RNM', 'RNC', 'RNH']:
-                                suffix = potential_suffix
-                    break
-            
-            if suffix:
-                self._log(f"    Найден суффикс для GAZ6000 в запросе: {suffix}")
-        
-        # Общий поиск моделей (для M30, B30, C30 и т.д.)
-        if not model_base:
-            for pattern in self.MODEL_PATTERNS:
-                match = re.search(pattern, text_normalized, re.IGNORECASE)
-                if match:
-                    groups = match.groups()
-                    if len(groups) >= 2:
-                        letters = groups[0] if groups[0] else ''
-                        numbers = groups[1] if len(groups) > 1 and groups[1] else ''
-                        suffix_part = groups[2] if len(groups) > 2 and groups[2] else ''
-                        
-                        if letters and numbers:
-                            model_base = f"{letters}{numbers}"
-                            model_end_pos = match.end()
-                            if suffix_part:
-                                suffix = suffix_part.upper()
+            match_6000 = re.search(r'\b6000\b', text_normalized, re.IGNORECASE)
+            if match_6000:
+                model_end_pos = match_6000.end()
+                after_model = text_normalized[model_end_pos:]
+                
+                power_patterns = [
+                    r'(\d+)\s*([CH])\s+([A-Z]{1,3})\b',
+                    r'(\d+)\s*([CH])\b',
+                    r'(\d+)\s*([A-Z]{1,3})\b',
+                ]
+                
+                for pattern in power_patterns:
+                    match = re.search(pattern, after_model, re.IGNORECASE)
+                    if match:
+                        groups = match.groups()
+                        if len(groups) >= 2:
+                            try:
+                                params.power = int(groups[0])
+                            except ValueError:
+                                pass
+                            
+                            if groups[1] in ['C', 'H']:
+                                params.conn_type = groups[1]
+                                if len(groups) >= 3 and groups[2]:
+                                    suffix = groups[2].upper()
                             else:
-                                suffix = self._extract_suffix_from_text(text_normalized, model_base, model_end_pos)
-                            break
+                                potential_suffix = groups[1].upper()
+                                if potential_suffix in self.VALID_SUFFIXES:
+                                    suffix = potential_suffix
+                        break
+                
+                if suffix:
+                    params.model_suffix = suffix
+                    self._log(f"    Найден суффикс для 6000: {suffix}")
         
-        # Поиск T2, Q3
+        # ========== 2. ГАЗ 6000 ==========
         if not model_base:
-            model_match = re.search(r'\b([TQ])([0-9]{1})\b', text_normalized, re.IGNORECASE)
-            if model_match:
-                model_base = f"{model_match.group(1).upper()}{model_match.group(2)}"
-                model_end_pos = model_match.end()
-                suffix = self._extract_suffix_from_text(text_normalized, model_base, model_end_pos)
+            gaz_match = re.search(r'(ГАЗ|GAZ)\s*6000', text_normalized, re.IGNORECASE)
+            if gaz_match:
+                model_base = 'GAZ6000'
+                model_end_pos = gaz_match.end()
+                after_model = text_normalized[model_end_pos:]
+                
+                patterns = [
+                    r'(\d*)\s*([CH])\s+([A-Z]{1,3})\b',
+                    r'(\d*)([CH])\s+([A-Z]{1,3})\b',
+                    r'(\d*)([A-Z]{1,3})\b',
+                ]
+                
+                for pattern in patterns:
+                    match = re.search(pattern, after_model, re.IGNORECASE)
+                    if match:
+                        groups = match.groups()
+                        if len(groups) >= 2:
+                            if groups[1] in ['C', 'H']:
+                                params.conn_type = groups[1]
+                                if len(groups) >= 3 and groups[2]:
+                                    suffix = groups[2].upper()
+                            else:
+                                potential_suffix = groups[1].upper()
+                                if potential_suffix in self.VALID_SUFFIXES:
+                                    suffix = potential_suffix
+                        break
+                
+                if suffix:
+                    params.model_suffix = suffix
+                    self._log(f"    Найден суффикс для ГАЗ 6000: {suffix}")
         
-        # Поиск любых буква+цифры
+        # ========== 3. Общий поиск моделей (ИСПРАВЛЕН) ==========
         if not model_base:
-            model_match = re.search(r'\b([A-Z]+[0-9]+)\b', text_normalized)
-            if model_match:
-                model_base = model_match.group(1).upper()
-                model_end_pos = model_match.end()
-                suffix = self._extract_suffix_from_text(text_normalized, model_base, model_end_pos)
+            # Ищем букву + пробел + цифры (C 11, B 30)
+            # Используем [BСCMВTQ] - и русскую и латинскую C
+            match = re.search(r'\b([BСCMВTQ])\s+([0-9]{1,2})([A-Z]{1,3})?\b', text_normalized, re.IGNORECASE)
+            if match:
+                letters = match.group(1).upper()
+                numbers = match.group(2)
+                suffix_part = match.group(3) if match.group(3) else ''
+                # Если буква - русская С, заменяем на латинскую C для единообразия
+                if letters == 'С':
+                    letters = 'C'
+                model_base = f"{letters}{numbers}"
+                model_end_pos = match.end()
+                if suffix_part:
+                    suffix = suffix_part.upper()
+                else:
+                    suffix = self._extract_suffix_from_text(text_normalized, model_base, model_end_pos)
+                self._log(f"    Найдена модель (с пробелом): {model_base}, суффикс={suffix}")
+            
+            # Если не нашли с пробелом, ищем без пробела (C11, B30)
+            if not model_base:
+                match = re.search(r'\b([BСCMВTQ])([0-9]{1,2})([A-Z]{1,3})?\b', text_normalized, re.IGNORECASE)
+                if match:
+                    letters = match.group(1).upper()
+                    numbers = match.group(2)
+                    suffix_part = match.group(3) if match.group(3) else ''
+                    if letters == 'С':
+                        letters = 'C'
+                    model_base = f"{letters}{numbers}"
+                    model_end_pos = match.end()
+                    if suffix_part:
+                        suffix = suffix_part.upper()
+                    else:
+                        suffix = self._extract_suffix_from_text(text_normalized, model_base, model_end_pos)
+                    self._log(f"    Найдена модель (без пробела): {model_base}, суффикс={suffix}")
+        
+        # Если нашли модель, но не нашли суффикс — пробуем извлечь из остатка
+        if model_base and not suffix and model_end_pos > 0:
+            suffix = self._extract_suffix_from_text(text_normalized, model_base, model_end_pos)
         
         # Устанавливаем модель и суффикс
         if model_base:
@@ -592,40 +704,31 @@ class ProductNormalizer:
             if suffix:
                 params.model_suffix = suffix
         
-        # ========== МОЩНОСТЬ ==========
-        power_match = re.search(r'(\d{2})\s*([CHСН])', text_upper)
-        if power_match:
-            params.power = int(power_match.group(1))
-            conn = power_match.group(2)
-            if conn in ['C', 'С']:
-                params.conn_type = 'C'
-            elif conn in ['H', 'Н']:
-                params.conn_type = 'H'
-        else:
-            for pattern in self.POWER_PATTERNS:
-                match = re.search(pattern, text, re.IGNORECASE)
-                if match:
-                    params.power = int(match.group(1))
-                    break
-            
-            if not params.conn_type:
-                if re.search(r'\bC\b', text_upper) or re.search(r'\bС\b', text_upper):
-                    params.conn_type = 'C'
-                elif re.search(r'\bH\b', text_upper) or re.search(r'\bН\b', text_upper):
-                    params.conn_type = 'H'
+        # ========== 4. Мощность (если ещё не найдена) ==========
+        if not params.power:
+            power_match = re.search(r'\b(\d{2})\s*[CH]\b', text, re.IGNORECASE)
+            if power_match:
+                params.power = int(power_match.group(1))
+            else:
+                for pattern in self.POWER_PATTERNS:
+                    match = re.search(pattern, text, re.IGNORECASE)
+                    if match:
+                        params.power = int(match.group(1))
+                        break
         
-        self._log(f"    ИТОГО: модель={params.model}, суффикс={params.model_suffix}, мощность={params.power}, тип={params.conn_type}, wifi={params.has_wifi}")
-
+        # ========== 5. Тип подключения (если ещё не найден) ==========
+        if not params.conn_type:
+            if re.search(r'\bC\b', text_upper) or re.search(r'\bС\b', text_upper):
+                params.conn_type = 'C'
+            elif re.search(r'\bH\b', text_upper) or re.search(r'\bН\b', text_upper):
+                params.conn_type = 'H'
+        
+        self._log(f"    ИТОГО: модель={params.model}, суффикс={params.model_suffix}, "
+                  f"мощность={params.power}, тип={params.conn_type}, wifi={params.has_wifi}")
+                  
     def _extract_chimney_params(self, params: ProductParams, text_upper: str):
         """Извлекает параметры дымохода."""
-        self._log(f"    [ОТЛАДКА] Начало обработки дымохода. Текст: '{text_upper[:100]}'")
-        
-        # ========== ФЛАНЕЦ - ОСОБАЯ ОБРАБОТКА ==========
         if 'ФЛАНЕЦ' in text_upper:
-            # Фланец - это всегда дымоход, но у него нет размера DN
-            # Просто помечаем, что это фланец, и не ищем размер
-            self._log(f"    [ОТЛАДКА] Обнаружен фланец - не ищем размер DN")
-            self._log(f"    [ОТЛАДКА] ИТОГО: size=, article=, condensing=False (фланец)")
             return
         
         # Конденсационный тип
@@ -633,73 +736,51 @@ class ProductNormalizer:
         for kw in condensing_keywords:
             if kw.upper() in text_upper:
                 params.is_condensing = True
-                self._log(f"    [ОТЛАДКА] Найден конденсационный признак: {kw}")
                 break
         
         # Артикул WT...
         wt_match = re.search(r'(WT\d{5,6}-\d+[A-Z]*)', text_upper)
         if wt_match:
             params.article_code = wt_match.group(1)
-            self._log(f"    [ОТЛАДКА] Найден артикул WT: {params.article_code}")
             if 'LN' in params.article_code.upper():
                 params.is_condensing = True
-                self._log(f"    [ОТЛАДКА] Артикул содержит LN -> конденсационный")
             
-            # ========== ОПРЕДЕЛЯЕМ РАЗМЕР ПО АРТИКУЛУ ==========
             if '60100' in params.article_code:
                 params.size = 'DN60/100'
-                self._log(f"    [ОТЛАДКА] Определён размер по артикулу {params.article_code}: DN60/100")
             elif '80125' in params.article_code:
                 params.size = 'DN80/125'
-                self._log(f"    [ОТЛАДКА] Определён размер по артикулу {params.article_code}: DN80/125")
-            else:
-                self._log(f"    [ОТЛАДКА] Не удалось определить размер по артикулу {params.article_code}")
         
-        # Размер DN (если ещё не определён)
+        # Размер DN
         if not params.size:
             size_match = re.search(r'DN(\d{2,3})/(\d{2,3})', text_upper)
             if size_match:
                 params.size = f"DN{size_match.group(1)}/{size_match.group(2)}"
-                self._log(f"    [ОТЛАДКА] Найден размер DN: {params.size}")
         
-        # Альтернативные форматы (60/100, 60 на 100, 60х100)
         if not params.size:
             size_match = re.search(r'(\d{2,3})/(\d{2,3})', text_upper)
             if size_match:
                 params.size = f"DN{size_match.group(1)}/{size_match.group(2)}"
-                self._log(f"    [ОТЛАДКА] Найден размер в формате X/X: {params.size}")
         
         if not params.size:
             size_match = re.search(r'(\d{2,3})\s+на\s+(\d{2,3})', text_upper, re.IGNORECASE)
             if size_match:
                 params.size = f"DN{size_match.group(1)}/{size_match.group(2)}"
-                self._log(f"    [ОТЛАДКА] Найден размер в формате X на X: {params.size}")
         
         if not params.size:
             size_match = re.search(r'(\d{2,3})[хxX](\d{2,3})', text_upper)
             if size_match:
                 params.size = f"DN{size_match.group(1)}/{size_match.group(2)}"
-                self._log(f"    [ОТЛАДКА] Найден размер в формате XxX: {params.size}")
-        
-        if not params.size:
-            self._log(f"    [ОТЛАДКА] НЕ УДАЛОСЬ ОПРЕДЕЛИТЬ РАЗМЕР!")
-        
-        self._log(f"    [ОТЛАДКА] ИТОГО: size={params.size}, article={params.article_code}, condensing={params.is_condensing}")
 
     def _extract_water_heater_params(self, params: ProductParams, text: str):
         """Извлекает параметры бойлера."""
-        # Формат: "IHT G 150"
         volume_match = re.search(r'IHT G (\d{3})', text, re.IGNORECASE)
         if volume_match:
             params.volume = int(volume_match.group(1))
             return
         
-        # Альтернативный формат: "Бойлер 300"
         volume_match = re.search(r'[Бб]ойлер\s+(\d{3})', text)
         if volume_match:
             params.volume = int(volume_match.group(1))
-            self._log(f"    Найден объём бойлера (альтернативный формат): {params.volume}")
-            return
 
     def _extract_conversion_kit_params(self, params: ProductParams, text: str):
         """Извлекает параметры комплекта перенастройки."""
@@ -719,6 +800,7 @@ class ProductNormalizer:
         patterns = [
             r'(\d{2})[/-](\d{3,4})[/-](\d{3,4})',
             r'(\d{2})\s+(\d{3,4})\s+(\d{3,4})',
+            r'(\d{2})\s*[-]\s*(\d{3,4})\s*[-]\s*(\d{3,4})',
         ]
         for pattern in patterns:
             match = re.search(pattern, text)
@@ -747,18 +829,10 @@ class ProductNormalizer:
                 params.bracket_article = match.group(1)
                 break
 
-    # ========== НОВЫЙ МЕТОД: ИЗВЛЕЧЕНИЕ ПАРАМЕТРОВ КОМПЛЕКТУЮЩИХ К РАДИАТОРАМ ==========
     def _extract_radiator_accessory_params(self, params: ProductParams, text: str):
-        """
-        Извлекает параметры комплектующих к радиаторам:
-        - решётки: тип (10/11/21, 20/22, 30/33) и длина
-        - панели: тип и высота
-        - клипсы: бренд и размер (короткая/длинная)
-        - заглушки, краны, колпачки, регуляторы, адаптеры
-        """
+        """Извлекает параметры комплектующих к радиаторам."""
         text_lower = text.lower()
         
-        # ========== ОПРЕДЕЛЯЕМ ТИП КОМПЛЕКТУЮЩЕГО ==========
         if any(x in text_lower for x in ['решетка', 'решётка']):
             params.accessory_type = 'решетка'
         elif any(x in text_lower for x in ['боковая панель', 'панель боковая']):
@@ -778,43 +852,30 @@ class ProductNormalizer:
         else:
             params.accessory_type = 'другое'
         
-        # ========== ИЗВЛЕКАЕМ СПИСОК ТИПОВ (для решёток и панелей) ==========
         if params.accessory_type in ['решетка', 'панель']:
-            # Ищем паттерн "тип 10, 11, 21" или "тип 20, 22" или "тип 30, 33"
             types_match = re.search(r'тип\s+([\d\s,]+)', text_lower)
             if types_match:
                 types_str = types_match.group(1)
-                # Извлекаем все числа
                 types = re.findall(r'\d+', types_str)
                 params.types_list = types
-                self._log(f"    Найдены типы: {params.types_list}")
         
-        # ========== ИЗВЛЕКАЕМ ДЛИНУ (для решёток) ==========
         if params.accessory_type == 'решетка':
             length_match = re.search(r'длина\s+(\d+)', text_lower)
             if length_match:
                 params.length = int(length_match.group(1))
-                self._log(f"    Найдена длина: {params.length}")
         
-        # ========== ИЗВЛЕКАЕМ ВЫСОТУ (для панелей) ==========
         if params.accessory_type == 'панель':
             height_match = re.search(r'высота\s+(\d+)', text_lower)
             if height_match:
                 params.height = int(height_match.group(1))
-                self._log(f"    Найдена высота: {params.height}")
         
-        # ========== ИЗВЛЕКАЕМ БРЕНД И ПОДТИП (для клипс) ==========
         if params.accessory_type == 'клипса':
-            # Бренд
             if 'laggartt' in text_lower or 'laggar' in text_lower or 'бренд' in text_lower:
                 params.accessory_brand = 'laggartt'
             elif 'meteor' in text_lower:
                 params.accessory_brand = 'meteor'
             
-            # Подтип (короткая/длинная)
             if 'коротк' in text_lower:
                 params.accessory_subtype = 'короткая'
             elif 'длинн' in text_lower:
                 params.accessory_subtype = 'длинная'
-            
-            self._log(f"    Клипса: бренд={params.accessory_brand}, подтип={params.accessory_subtype}")

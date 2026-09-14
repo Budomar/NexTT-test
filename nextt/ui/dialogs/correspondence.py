@@ -926,11 +926,6 @@ class CorrespondenceDialog:
                 self.app.main_window._type_var.get()
             )
 
-        # ========== АКТИВИРУЕМ КНОПКУ "АНАЛОГИ" ==========
-        if hasattr(self.app.main_window, '_edit_correspondence_btn'):
-            self.app.main_window._edit_correspondence_btn.config(state="normal")
-        # ==================================================
-
         self._close()
 
         if transferred > 0:

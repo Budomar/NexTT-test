@@ -72,6 +72,7 @@ class SpecNormalizer:
         'ruterm', 'forte', 'terma', 'korad', 'hiterm',
         'vogel', 'radson', 'hitachi', 'lidea', 'ростерм',
         'meteor', 'laggar', 'logatrend', 'isoterm', 'spl',
+        'kvs', 'kv', 'kermi', 'purmo',
     ]
 
     def __init__(self, debug: bool = False, templates_file: str = "templates.json"):
@@ -83,6 +84,7 @@ class SpecNormalizer:
     
     def _load_builtin_strategies(self):
         builtin = [
+            ("hygiene", self._parse_hygiene, 0.95),  # НОВАЯ СТРАТЕГИЯ ДЛЯ ГИГИЕНИЧЕСКИХ
             ("evra_format", self._parse_evra_format, 0.98),
             ("oasis", self._parse_oasis, 0.95),
             ("coded_triplet", self._parse_coded_triplet, 0.95),
@@ -561,6 +563,350 @@ class SpecNormalizer:
     # ========================================================================
     # ПАРСЕРЫ
     # ========================================================================
+
+    # ================================================================
+    # НОВАЯ СТРАТЕГИЯ: ГИГИЕНИЧЕСКИЕ РАДИАТОРЫ
+    # ================================================================
+    def _parse_hygiene(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
+        """
+        УНИВЕРСАЛЬНЫЙ ПАРСЕР ДЛЯ ГИГИЕНИЧЕСКИХ РАДИАТОРОВ
+        Распознаёт названия, содержащие слова:
+        - русские: гигиенический, гигиенич, гигиен, гигиеничн и т.д.
+        - английские: hygiene, hygienic, hygien и т.д.
+        
+        Извлекает:
+        - тип: 10, 20, 30
+        - высота: 300, 400, 500, 600, 900
+        - длина: от 400 до 3000 с шагом 100
+        - подключение: HV-правое, HV-левое, H-боковое
+        """
+        try:
+            # Объединяем текст для поиска
+            combined = (text + " " + original).lower()
+            
+            # ================================================================
+            # ШАГ 1: ПРОВЕРКА НА ГИГИЕНИЧЕСКИЙ РАДИАТОР
+            # ================================================================
+            # Русские варианты
+            russian_patterns = [
+                r'гигиеническ',   # гигиенический, гигиеническая, гигиеническое
+                r'гигиеничн',     # гигиеничн...
+                r'гигиенич',      # гигиенич...
+                r'гигиен',        # гигиен...
+            ]
+            
+            # Английские варианты
+            english_patterns = [
+                r'hygienic',      # hygienic
+                r'hygiene',       # hygiene
+                r'hygien',        # hygien...
+            ]
+            
+            # Проверяем наличие любого из ключевых слов
+            is_hygiene = False
+            for pattern in russian_patterns:
+                if re.search(pattern, combined):
+                    is_hygiene = True
+                    break
+            if not is_hygiene:
+                for pattern in english_patterns:
+                    if re.search(pattern, combined):
+                        is_hygiene = True
+                        break
+            
+            # Если нет признаков гигиены — пропускаем
+            if not is_hygiene:
+                return None
+            
+            logger.info(f"  [HYGIENE] Обнаружен гигиенический радиатор: '{original[:80]}'")
+            
+            # ================================================================
+            # ШАГ 2: ИЗВЛЕЧЕНИЕ ПАРАМЕТРОВ (ПРИОРИТЕТ 1: ЯВНЫЕ УКАЗАНИЯ)
+            # ================================================================
+            rad_type = None
+            height = None
+            length = None
+            
+            # 2.1: Явное указание типа: "тип 20KV", "тип 20", "type 20"
+            type_patterns = [
+                r'тип\s*(\d{2})[a-z]*',   # тип 20KV, тип 20
+                r'type\s*(\d{2})',         # type 20
+            ]
+            for pattern in type_patterns:
+                match = re.search(pattern, combined)
+                if match:
+                    rad_type = match.group(1)
+                    if rad_type in ['10', '20', '30']:
+                        logger.info(f"  [HYGIENE] Тип из явного указания: {rad_type}")
+                        break
+            
+            # 2.2: Явное указание высоты: "высотой H = 500 мм", "H=500 мм", "H=500"
+            height_patterns = [
+                r'высот[аой]\s*(?:h\s*=\s*)?(\d{3,4})\s*мм',  # высотой H = 500 мм
+                r'h\s*=\s*(\d{3,4})\s*мм',                     # H=500 мм
+                r'h\s*=\s*(\d{3,4})',                          # H=500
+                r'высот[аой]\s*(\d{3,4})\s*мм',                # высотой 500 мм
+            ]
+            for pattern in height_patterns:
+                match = re.search(pattern, combined)
+                if match:
+                    height = int(match.group(1))
+                    logger.info(f"  [HYGIENE] Высота из явного указания: {height}")
+                    break
+            
+            # 2.3: Явное указание длины: "длиной 0,8 м", "L=0,8 м", "L=800"
+            length_patterns = [
+                r'длин[аой]\s*(?:l\s*=\s*)?([\d,]+)\s*м',     # длиной 0,8 м
+                r'l\s*=\s*([\d,]+)\s*м',                       # L=0,8 м
+                r'l\s*=\s*(\d{3,4})',                          # L=800
+                r'длин[аой]\s*(\d{3,4})',                      # длина 800
+            ]
+            for pattern in length_patterns:
+                match = re.search(pattern, combined)
+                if match:
+                    length_str = match.group(1)
+                    # Если есть запятая (0,8) — преобразуем в миллиметры
+                    if ',' in length_str:
+                        length_float = float(length_str.replace(',', '.'))
+                        length = int(length_float * 1000)
+                    else:
+                        length = int(length_str)
+                    logger.info(f"  [HYGIENE] Длина из явного указания: {length}")
+                    break
+            
+            # ================================================================
+            # ШАГ 3: ЕСЛИ НЕ НАШЛИ — ПЫТАЕМСЯ ИЗВЛЕЧЬ ИЗ КРАТКОГО ФОРМАТА
+            # ================================================================
+            if rad_type is None or height is None or length is None:
+                # Формат: KV20-500-800, KV 20-500-800, 20KV-500-800
+                short_patterns = [
+                    r'[a-z]{2,3}(\d{2})[-\s](\d{3,4})[-\s](\d{3,4})',  # KV20-500-800
+                    r'(\d{2})[a-z]{2,3}[-\s](\d{3,4})[-\s](\d{3,4})',  # 20KV-500-800
+                    r'[a-z]{2,3}\s*(\d{2})\s*[-\s]\s*(\d{3,4})\s*[-\s]\s*(\d{3,4})',  # KV 20-500-800
+                ]
+                for pattern in short_patterns:
+                    match = re.search(pattern, combined)
+                    if match:
+                        # Определяем, где тип, высота, длина
+                        groups = match.groups()
+                        # Первая группа — всегда тип (если есть буквы перед ним, то это 2-я группа)
+                        if rad_type is None:
+                            # Пробуем найти тип среди групп
+                            for g in groups:
+                                if g in ['10', '20', '30']:
+                                    rad_type = g
+                                    break
+                        if height is None:
+                            for g in groups:
+                                try:
+                                    h = int(g)
+                                    if h in self.VALID_HEIGHTS or h in self.HEIGHT_MAPPING:
+                                        height = h
+                                        break
+                                except:
+                                    pass
+                        if length is None:
+                            for g in groups:
+                                try:
+                                    l = int(g)
+                                    if 400 <= l <= 3000 and l % 100 == 0:
+                                        length = l
+                                        break
+                                except:
+                                    pass
+                        if rad_type and height and length:
+                            logger.info(f"  [HYGIENE] Извлечено из краткого формата: тип={rad_type}, h={height}, l={length}")
+                            break
+            
+            # ================================================================
+            # ШАГ 4: ЕСЛИ НЕ НАШЛИ — ПЫТАЕМСЯ ИЗВЛЕЧЬ ТРИПЛЕТ ЧИСЕЛ
+            # ================================================================
+            if rad_type is None or height is None or length is None:
+                # Ищем три числа через разделители
+                sep = r'[-/xх\s]+'
+                triplet_pattern = r'(?<!\d)(\d{2,4})\s*' + sep + r'\s*(\d{3,4})\s*' + sep + r'\s*(\d{3,4})(?!\d)'
+                match = re.search(triplet_pattern, combined)
+                if match:
+                    first = match.group(1)
+                    second = match.group(2)
+                    third = match.group(3)
+                    
+                    # Определяем, что есть что
+                    # Тип: 10, 20, 30
+                    # Высота: 300, 400, 500, 600, 900
+                    # Длина: от 400 до 3000
+                    
+                    # Пробуем определить тип
+                    candidates = [first, second, third]
+                    for c in candidates:
+                        if c in ['10', '20', '30']:
+                            rad_type = c
+                            candidates.remove(c)
+                            break
+                    
+                    # Если тип не нашли — пробуем по числовым значениям
+                    if rad_type is None:
+                        for c in candidates:
+                            try:
+                                val = int(c)
+                                if 10 <= val <= 33:
+                                    rad_type = str(val)
+                                    candidates.remove(c)
+                                    break
+                            except:
+                                pass
+                    
+                    # Определяем высоту и длину
+                    if rad_type and len(candidates) >= 2:
+                        # Преобразуем оставшиеся числа в int
+                        nums = []
+                        for c in candidates:
+                            try:
+                                nums.append(int(c))
+                            except:
+                                pass
+                        
+                        # Сортируем по размеру (высота обычно меньше длины)
+                        if len(nums) >= 2:
+                            # Высота: 300, 400, 500, 600, 900
+                            # Длина: от 400 до 3000
+                            for n in nums:
+                                if n in self.VALID_HEIGHTS or n in self.HEIGHT_MAPPING:
+                                    height = n
+                                    nums.remove(n)
+                                    break
+                            # Оставшееся число — длина
+                            if height is not None and nums:
+                                length = nums[0]
+                                if length < 400:
+                                    length = length * 100
+                            elif height is None and nums:
+                                # Если не нашли высоту — пробуем определить по размеру
+                                if nums[0] in self.VALID_HEIGHTS or nums[0] in self.HEIGHT_MAPPING:
+                                    height = nums[0]
+                                    if len(nums) > 1:
+                                        length = nums[1]
+                                elif nums[1] in self.VALID_HEIGHTS or nums[1] in self.HEIGHT_MAPPING:
+                                    height = nums[1]
+                                    length = nums[0]
+                                else:
+                                    # По умолчанию: меньшее = высота, большее = длина
+                                    height = min(nums[0], nums[1])
+                                    length = max(nums[0], nums[1])
+                                    if height < 400:
+                                        height = height * 100
+                                    if length < 400:
+                                        length = length * 100
+                            
+                            logger.info(f"  [HYGIENE] Извлечено из триплета: тип={rad_type}, h={height}, l={length}")
+            
+            # ================================================================
+            # ШАГ 5: ВАЛИДАЦИЯ
+            # ================================================================
+            if rad_type is None:
+                return None
+            if rad_type not in ['10', '20', '30']:
+                return None
+            
+            if height is None:
+                return None
+            if height not in self.VALID_HEIGHTS:
+                if height in self.HEIGHT_MAPPING:
+                    height = self.HEIGHT_MAPPING[height]
+                else:
+                    # Ищем ближайшую допустимую высоту
+                    closest = min(self.VALID_HEIGHTS, key=lambda h: abs(h - height))
+                    if abs(closest - height) <= 100:
+                        height = closest
+                    else:
+                        return None
+            
+            if length is None:
+                return None
+            if length < 400 or length > 3000:
+                return None
+            if length % 100 != 0:
+                rounded = round(length / 100) * 100
+                if 400 <= rounded <= 3000:
+                    length = rounded
+                else:
+                    return None
+            
+            # ================================================================
+            # ШАГ 6: ОПРЕДЕЛЕНИЕ ПОДКЛЮЧЕНИЯ
+            # ================================================================
+            connection = "HV-правое"  # По умолчанию
+            
+            # Проверяем на левое
+            left_patterns = [
+                r'\bлевое\b', r'\bлев\b', r'\bлев\.', r'\bла\b', r'\bla\b',
+                r'\bleft\b', r'\bl\b(?![a-z])',
+            ]
+            for pattern in left_patterns:
+                if re.search(pattern, combined):
+                    connection = "HV-левое"
+                    logger.info(f"  [HYGIENE] Определено левое подключение")
+                    break
+            
+            # Проверяем на боковое (если не левое)
+            if connection != "HV-левое":
+                side_patterns = [
+                    r'\bбоковое\b', r'\bбок\b', r'\bбок\.',
+                    r'\bh-боковое\b', r'\bh боковое\b',
+                    r'\bhygiene\s*\(h\)\b',
+                ]
+                for pattern in side_patterns:
+                    if re.search(pattern, combined):
+                        connection = "H-боковое"
+                        logger.info(f"  [HYGIENE] Определено боковое подключение")
+                        break
+            
+            # Проверяем на правое (если не левое и не боковое)
+            if connection == "HV-правое":
+                right_patterns = [
+                    r'\bправое\b', r'\bправ\b', r'\bправ\.',
+                    r'\bра\b', r'\bra\b', r'\bright\b',
+                    r'\br\b(?![a-z])',
+                ]
+                for pattern in right_patterns:
+                    if re.search(pattern, combined):
+                        logger.info(f"  [HYGIENE] Определено правое подключение")
+                        break
+            
+            # Если тип 20 и подключение HV-левое — исправляем на HV-правое
+            if rad_type == '20' and connection == "HV-левое":
+                connection = "HV-правое"
+                logger.info(f"  [HYGIENE] Тип 20 универсальный, исправлено на HV-правое")
+            
+            # ================================================================
+            # ШАГ 7: ОПРЕДЕЛЕНИЕ БРЕНДА
+            # ================================================================
+            brand = ""
+            for known_brand in self.KNOWN_BRANDS:
+                if known_brand in combined:
+                    brand = known_brand
+                    break
+            
+            # ================================================================
+            # ШАГ 8: СОЗДАЁМ РЕЗУЛЬТАТ
+            # ================================================================
+            result = ParsedRadiator()
+            result.recognized = True
+            result.connection = connection
+            result.rad_type = rad_type
+            result.height = height
+            result.length = length
+            result.confidence = 0.95
+            result.source = "hygiene"
+            result.brand = brand
+            
+            logger.info(f"  [HYGIENE] ✅ ИТОГ: {connection}, тип {rad_type}, {height}×{length}, бренд={brand}")
+            
+            return result
+            
+        except Exception as e:
+            self._log(f"HYGIENE parser error: {e}", "ERROR")
+            return None
 
     # ================================================================
     # НОВАЯ СТРАТЕГИЯ: УНИВЕРСАЛЬНЫЙ ПАРСЕР ДЛЯ РАДИАТОРОВ EVRA

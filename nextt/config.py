@@ -18,11 +18,12 @@ class AppConfig:
         "window_geometry": {
             "x": 0,
             "y": 0,
-            "width": 1200,
-            "height": 800,
+            "width": 1915,
+            "height": 340,
             "zoomed": False,
         },
         "font_scale_factor": 1.0,  # Коэффициент масштабирования шрифтов
+        "preview_show_images": True,  # Показывать подсказки-картинки в окне предпросмотра
     }
 
     def __init__(self, config_path: Optional[str] = None):

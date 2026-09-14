@@ -59,13 +59,13 @@ class App:
         setup_logger(level="INFO", log_file=None)
         
         logger.info("=" * 60)
-        logger.info("Запуск NexTT 2.4")
+        logger.info("Запуск NexTT 2.7")
         logger.info("=" * 60)
 
         # --- Root-окно (ПОЛНОСТЬЮ СКРЫТО до готовности) ---
         self.root = tk.Tk()
         self.root.withdraw()
-        self.root.title("NexTT 2.4")
+        self.root.title("NexTT 2.7")
 
         # --- Настройка DPI ---
         cache_scale(self.root)

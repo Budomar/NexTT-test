@@ -12,7 +12,7 @@ from nextt.logger import get_logger
 
 logger = get_logger(__name__)
 
-EXPERIMENTAL_ENABLED = False
+EXPERIMENTAL_ENABLED = True
 
 
 def register_paste_button(main_window) -> None:

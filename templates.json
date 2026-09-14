@@ -1,2 +1,77 @@
 {
+  "версия": "1.0",
+  "шаблоны": [
+    {
+      "id": "template_001",
+      "name": "ОП1 21-500-500...",
+      "original_example": "ОП1 21-500-500",
+      "mask": "ОП1 {type}-{height}-{length}",
+      "connection": "VK-правое",
+      "type_transform": {},
+      "height_transform": "direct",
+      "length_transform": "direct",
+      "priority": 95,
+      "created_at": "2026-09-09T15:03:56.882612"
+    },
+    {
+      "id": "template_002",
+      "name": "ОТОПИТЕЛЬНЫЙ ПРИБОР ...",
+      "original_example": "Отопительный прибор гигиенический стальной панельный c нижним подключением, со встроенным термостатическим вентилем Oventrop 101 80 80, тип 10KV, высотой H = 500 мм, длиной 0,4 м, мощностью 0,298 кВт",
+      "mask": "Отопительный прибор гигиенический стальной панельный c нижним подключением, со встроенным термостатическим вентилем Oventrop 101 80 80, тип {type}KV, высотой H = {height} мм, длиной {length} м, мощностью 0,298 кВт",
+      "connection": "HV-правое",
+      "type_transform": {},
+      "height_transform": "direct",
+      "length_transform": "parse_decimal",
+      "priority": 95,
+      "created_at": "2026-09-09T15:03:56.882624"
+    },
+    {
+      "id": "template_003",
+      "name": "РОСТ КV10-500-400...",
+      "original_example": "РОСТ КV10-500-400",
+      "mask": "РОСТ КV{type}-{height}-{length}",
+      "connection": "HV-правое",
+      "type_transform": {},
+      "height_transform": "direct",
+      "length_transform": "direct",
+      "priority": 95,
+      "created_at": "2026-09-09T15:03:56.882629"
+    },
+    {
+      "id": "template_004",
+      "name": "ОТОПИТЕЛЬНЫЙ ПРИБОР ...",
+      "original_example": "Отопительный прибор стальной панельный K-Profil, тип 21, высота Н=400 мм в комплекте с кронштейнами К15.4400, 0,5 м",
+      "mask": "Отопительный прибор стальной панельный K-Profil, тип {type}, высота Н={height} мм в комплекте с кронштейнами К15.4400, {length} м",
+      "connection": "K-боковое",
+      "type_transform": {},
+      "height_transform": "direct",
+      "length_transform": "parse_decimal",
+      "priority": 95,
+      "created_at": "2026-09-09T15:03:56.882633"
+    },
+    {
+      "id": "template_005",
+      "name": "ОТОПИТЕЛЬНЫЙ ПРИБОР ...",
+      "original_example": "Отопительный прибор стальной панельный K-Profil, тип 21, высота Н=500 мм в комплекте с кронштейнами К15.4500, 0,5 м",
+      "mask": "Отопительный прибор стальной панельный K-Profil, тип {type}, высота Н={height} мм в комплекте с кронштейнами К15.4500, {length} м",
+      "connection": "K-боковое",
+      "type_transform": {},
+      "height_transform": "direct",
+      "length_transform": "parse_decimal",
+      "priority": 95,
+      "created_at": "2026-09-09T15:03:56.882637"
+    },
+    {
+      "id": "template_006",
+      "name": "РОСТ 30К 500-2300...",
+      "original_example": "РОСТ 30К 500-2300",
+      "mask": "РОСТ {type}К {height}-{length}",
+      "connection": "H-боковое",
+      "type_transform": {},
+      "height_transform": "direct",
+      "length_transform": "direct",
+      "priority": 95,
+      "created_at": "2026-09-09T15:03:56.886554"
+    }
+  ]
 }

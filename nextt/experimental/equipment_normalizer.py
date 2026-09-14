@@ -205,18 +205,41 @@ class EquipmentNormalizer:
 
     def _search_by_params(self, query_params: ProductParams) -> Optional[Tuple[str, str, float]]:
         """
-        Поиск по параметрам с учётом суффиксов и типа подключения.
+        Поиск по параметрам с учётом типа товара и модели.
+        Если тип не определён — поиск не выполняется.
+        Если модель указана — ищем только записи с этой моделью.
         """
+        # ========== ВАЖНО: если тип не определён — не ищем ==========
+        if not query_params.product_type or query_params.product_type == 'other':
+            self._log(f"    Тип не определён, пропускаем поиск по параметрам")
+            return None
+        
         best_match = None
         best_score = 0.0
         best_article = None
         best_name = None
         
+        # ========== ЗАПОМИНАЕМ МОДЕЛЬ ИЗ ЗАПРОСА ==========
+        query_model = query_params.model.upper() if query_params.model else ""
+        self._log(f"    Поиск по модели: '{query_model}'")
+        
         for db_params, article in self._params_index:
+            # ========== СОВПАДЕНИЕ ТИПА — ОБЯЗАТЕЛЬНО ==========
+            if db_params.product_type != query_params.product_type:
+                continue
+            
+            # ========== ПРОВЕРКА МОДЕЛИ (НОВОЕ!) ==========
+            if query_model and db_params.model:
+                db_model = db_params.model.upper()
+                # Если модель указана в запросе, она должна совпадать
+                if query_model != db_model:
+                    self._log(f"    Пропускаем {article}: модель {db_model} не совпадает с {query_model}")
+                    continue
+            
             # Сравниваем параметры
             score = query_params.matches_params(db_params)
             
-            # Бонус за приоритет бренда LaggarTT
+            # Бонус за приоритет бренда LaggarTT (только если бренд не указан)
             if not query_params.brand and db_params.brand == 'laggartt':
                 score += 0.05
             
@@ -243,24 +266,25 @@ class EquipmentNormalizer:
                 elif not query_params.model_suffix and db_params.model_suffix:
                     score += 0.02
                 
-                # 3. Бонус за совпадение мощности
+                # ========== 3. МОЩНОСТЬ — ЖЁСТКАЯ ПРОВЕРКА ==========
                 if query_params.power and db_params.power:
                     if query_params.power == db_params.power:
-                        score += 0.10
+                        # Совпадение мощности — большой бонус
+                        score += 0.30
+                        self._log(f"      Бонус: совпадение мощности {query_params.power} +0.30")
                     else:
-                        score -= 0.05
+                        # НЕСОВПАДЕНИЕ МОЩНОСТИ — БОЛЬШОЙ ШТРАФ
+                        score -= 0.50
+                        self._log(f"      ШТРАФ: несовпадение мощности ({query_params.power} vs {db_params.power}) -0.50")
             
-            # ========== ДЛЯ ДЫМОХОДОВ: приоритет записям с размером ==========
+            # ========== ДЛЯ ДЫМОХОДОВ ==========
             if query_params.product_type == 'chimney' and db_params.product_type == 'chimney':
                 if query_params.size and db_params.size:
-                    # У обоих есть размер - нормально, уже учтено в matches_params
                     pass
                 elif query_params.size and not db_params.size:
-                    # У запроса есть размер, у записи нет - штраф
                     score -= 0.20
                     self._log(f"      Штраф: у записи {article} нет размера, хотя у запроса есть {query_params.size} -0.20")
                 elif not query_params.size and db_params.size:
-                    # У запроса нет размера, у записи есть - небольшой бонус
                     score += 0.05
                     self._log(f"      Бонус: у записи {article} есть размер {db_params.size} +0.05")
             
@@ -269,10 +293,12 @@ class EquipmentNormalizer:
                 best_article = article
                 best_name = str(self._article_index[article].get('Наименование', ''))
         
-        if best_score >= 0.5:
+        # ========== ПОРОГ УВЕРЕННОСТИ ==========
+        if best_score >= 0.6:
             self._log(f"    Поиск по параметрам: уверенность={best_score:.2f}")
             return (best_article, best_name, best_score)
         
+        self._log(f"    Поиск по параметрам: лучшая уверенность={best_score:.2f} (ниже порога 0.6)")
         return None
 
     def _search_by_fuzzy(self, text: str) -> Optional[Tuple[str, str, float]]:
@@ -311,20 +337,18 @@ class EquipmentNormalizer:
             return result
         
         # ========== ПРЯМОЙ ПОИСК ПО АРТИКУЛУ (ПРИОРИТЕТ 1) ==========
-        # Ищем артикул в тексте
         article_patterns = [
-            r'\b([A-Z]{2}\d{8})\b',   # AC02000024, AA04010164
-            r'\b(7[A-Z]\d{9})\b',     # 7U121011001, 7I121011001 (бойлеры)
-            r'\b(\d{10,11})\b',        # 87323019330
-            r'\b([A-Z]-\d+)\b',        # B-01 (фланцы)
-            r'\b([КK]\d{1,2}\.\d{1,4}[A-Z]?\d*)\b',  # Кронштейны
+            r'\b([A-Z]{2}\d{8})\b',
+            r'\b(7[A-Z]\d{9})\b',
+            r'\b(\d{10,11})\b',
+            r'\b([A-Z]-\d+)\b',
+            r'\b([КK]\d{1,2}\.\d{1,4}[A-Z]?\d*)\b',
         ]
         for pattern in article_patterns:
             match = re.search(pattern, text.upper())
             if match:
                 article = match.group(1)
                 self._log(f"    Найден потенциальный артикул: {article}")
-                # Ищем в индексе по артикулу
                 if article in self._article_index:
                     row = self._article_index[article]
                     result.article = article
@@ -347,22 +371,52 @@ class EquipmentNormalizer:
         result.connection_type = query_params.conn_type
         result.has_wifi = query_params.has_wifi
         
-        self._log(f"    Извлечены параметры: тип={query_params.product_type}, модель={query_params.model}, суффикс={query_params.model_suffix}, мощность={query_params.power}, тип_подкл={query_params.conn_type}, wifi={query_params.has_wifi}")
+        self._log(f"    Извлечены параметры: тип={query_params.product_type}, "
+                  f"модель={query_params.model}, суффикс={query_params.model_suffix}, "
+                  f"мощность={query_params.power}, тип_подкл={query_params.conn_type}, wifi={query_params.has_wifi}")
         
-        # 2. Поиск по параметрам
+        # ========== 2. ПОИСК ПО ПАРАМЕТРАМ ==========
         found = self._search_by_params(query_params)
         if found:
-            result.article, result.name, result.confidence = found
-            result.recognized = True
-            result.source = "params_match"
-            self._log(f"    ✅ Найдено по параметрам: {result.article} (уверенность={result.confidence:.2f})")
-            return result
+            found_article, found_name, found_confidence = found
+            
+            # ========== ПРОВЕРКА: совпадает ли мощность? ==========
+            power_mismatch = False
+            if query_params.power and query_params.product_type == 'boiler':
+                # Ищем мощность найденного артикула в индексе
+                for db_params, article in self._params_index:
+                    if article == found_article and db_params.power:
+                        if db_params.power != query_params.power:
+                            power_mismatch = True
+                            self._log(f"    ⚠️ НЕСОВПАДЕНИЕ МОЩНОСТИ: запрос {query_params.power} кВт, найдено {db_params.power} кВт")
+                            result.warnings.append(f"Мощность не совпадает: запрос {query_params.power} кВт, найдено {db_params.power} кВт")
+                        break
+            
+            # Если мощность не совпадает — снижаем уверенность
+            if power_mismatch:
+                found_confidence = min(found_confidence, 0.4)
+                self._log(f"    Уверенность снижена до {found_confidence:.2f} из-за несовпадения мощности")
+            
+            # Если уверенность всё ещё выше порога — возвращаем результат
+            if found_confidence >= 0.5:
+                result.article = found_article
+                result.name = found_name
+                result.recognized = True
+                result.confidence = found_confidence
+                result.source = "params_match"
+                self._log(f"    ✅ Найдено по параметрам: {result.article} (уверенность={result.confidence:.2f})")
+                return result
+            else:
+                self._log(f"    ❌ Отклонено из-за низкой уверенности: {found_confidence:.2f}")
         
-        # 3. Запасной поиск: fuzzy
+        # ========== 3. ЗАПАСНОЙ ПОИСК: FUZZY ==========
         found = self._search_by_fuzzy(text)
         if found:
-            result.article, result.name, result.confidence = found
+            found_article, found_name, found_confidence = found
+            result.article = found_article
+            result.name = found_name
             result.recognized = True
+            result.confidence = found_confidence
             result.source = "fuzzy_match"
             self._log(f"    ✅ Найдено через fuzzy поиск: {result.article} (уверенность={result.confidence:.2f})")
             return result

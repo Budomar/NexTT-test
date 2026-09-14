@@ -21,7 +21,7 @@ class FontManager:
 
     # Минимальный и максимальный коэффициенты масштаба
     MIN_SCALE = 0.5
-    MAX_SCALE = 2.0
+    MAX_SCALE = 1.6
     DEFAULT_SCALE = 1.0
     STEP = 0.05  # Шаг изменения при нажатии кнопок
 
@@ -233,7 +233,9 @@ class FontManager:
                 (".", default_font),
                 ("TLabel", default_font),
                 ("TButton", default_font),
-                ("TRadiobutton", default_font),
+                ("TRadiobutton", bold_font),         # ← ИЗМЕНЕНО: жирный
+                ("Green.TRadiobutton", bold_font),   # ← ДОБАВЛЕНО: жирный для гигиенических
+                ("Type.TRadiobutton", bold_font),    # ← ДОБАВЛЕНО: жирный для типов
                 ("TCheckbutton", default_font),
                 ("TEntry", default_font),
                 ("TFrame", default_font),

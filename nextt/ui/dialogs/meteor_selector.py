@@ -147,7 +147,16 @@ class MeteorSelector:
         step1 = ttk.LabelFrame(settings_container, text="ШАГ 1: ПОДКЛЮЧЕНИЕ", padding=10)
         step1.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
 
-        for conn in ["VK-правое", "VK-левое", "K-боковое"]:
+        # РАСШИРЕННЫЙ СПИСОК ПОДКЛЮЧЕНИЙ (6 ШТУК)
+        connections = [
+            "VK-правое",
+            "VK-левое",
+            "K-боковое",
+            "HV-правое",
+            "HV-левое",
+            "H-боковое",
+        ]
+        for conn in connections:
             ttk.Radiobutton(
                 step1, text=conn, variable=self._selected_connection, value=conn,
                 command=self._on_connection_changed
@@ -218,11 +227,16 @@ class MeteorSelector:
         instruction_text = (
             "1. ВЫБЕРИТЕ ПОДКЛЮЧЕНИЕ:\n"
             "• VK-правое/левое — нижнее подключение\n"
-            "• K-боковое — боковое подключение\n\n"
+            "• K-боковое — боковое подключение\n"
+            "• HV-правое/левое — гигиеническое нижнее подключение\n"
+            "• H-боковое — гигиеническое боковое подключение\n\n"
             "2. ВЫБЕРИТЕ ТИП:\n"
             "• Для радиаторов с нижним правым: 10, 11, 20, 21, 22, 30, 33\n"
             "• Для радиаторов с нижним левым: 10, 11, 30, 33\n"
-            "• Для радиаторов с боковым: 10, 11, 20, 21, 22, 30, 33\n\n"
+            "• Для радиаторов с боковым: 10, 11, 20, 21, 22, 30, 33\n"
+            "• Для HV-правого: 10, 20, 30\n"
+            "• Для HV-левого: 10, 30\n"
+            "• Для H-бокового: 10, 20, 30\n\n"
             "3. ВЫБЕРИТЕ РАЗМЕР:\n"
             "• Горизонтально — ДЛИНА (мм)\n"
             "• Вертикально — ВЫСОТА (мм)\n"
@@ -254,10 +268,18 @@ class MeteorSelector:
             w.destroy()
 
         conn = self._selected_connection.get()
+        
+        # Логика выбора типов в зависимости от подключения
         if conn == "VK-левое":
             types = ["10", "11", "30", "33"]
+        elif conn == "HV-левое":
+            types = ["10", "30"]
         else:
-            types = ["10", "11", "20", "21", "22", "30", "33"]
+            # VK-правое, K-боковое, HV-правое, H-боковое
+            if conn in ["HV-правое", "H-боковое"]:
+                types = ["10", "20", "30"]
+            else:  # VK-правое, K-боковое
+                types = ["10", "11", "20", "21", "22", "30", "33"]
 
         for rt in types:
             ttk.Radiobutton(
@@ -431,20 +453,9 @@ class MeteorSelector:
         conn = self._selected_connection.get()
         rt = self._selected_type.get()
 
-        # Исправление для универсальных типов
-        search_conn = conn
-        saved_conn = conn
-        if conn == "VK-левое" and rt in ('20', '21', '22'):
-            search_conn = "VK-правое"
-            saved_conn = "VK-правое"
-
-        art, name = self.app.data_provider.find_analog(search_conn, rt, height, length)
-
-        if not art and search_conn == "VK-правое" and rt in ('20', '21', '22'):
-            for alt_conn in ["VK-левое", "K-боковое"]:
-                art, name = self.app.data_provider.find_analog(alt_conn, rt, height, length)
-                if art:
-                    break
+        # Поиск аналога ТОЧНО по выбранным параметрам
+        # (без автоматического преобразования подключения)
+        art, name = self.app.data_provider.find_analog(conn, rt, height, length)
 
         if not art:
             messagebox.showwarning(
@@ -464,7 +475,7 @@ class MeteorSelector:
 
         logger.info("=" * 60)
         logger.info(f"ОБУЧЕНИЕ: оригинальное название = '{self._original_name[:80]}'")
-        logger.info(f"  Пользователь выбрал: conn={saved_conn}, type={rt}, h={height}, l={length}")
+        logger.info(f"  Пользователь выбрал: conn={conn}, type={rt}, h={height}, l={length}")
 
         # ================================================================
         # СОЗДАНИЕ ШАБЛОНА
@@ -474,7 +485,7 @@ class MeteorSelector:
             template_manager = TemplateManager()
             template = template_manager.analyze_and_create_template(
                 self._original_name,
-                saved_conn,
+                conn,
                 rt,
                 height,
                 length
@@ -550,11 +561,8 @@ class MeteorSelector:
             self._volume_var.set("—")
             return
 
-        search_conn = conn
-        if conn == "VK-левое" and rt in ('20', '21', '22'):
-            search_conn = "VK-правое"
-
-        art, name = self.app.data_provider.find_analog(search_conn, rt, h, l)
+        # Поиск аналога ТОЧНО по выбранным параметрам
+        art, name = self.app.data_provider.find_analog(conn, rt, h, l)
 
         if art:
             self._analog_name_var.set(f"LaggarTT {conn} {rt} {h}×{l}")

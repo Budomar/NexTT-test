@@ -43,8 +43,8 @@ class SpecGenerator:
 
         Returns:
             DataFrame с колонками:
-            №, Артикул, Наименование, Мощность, Вт, Цена, Скидка, %,
-            Цена со скидкой, Кол-во, Сумма
+            №, Артикул, Наименование, Мощность, Вт, Тип монтажа,
+            Цена, Скидка, %, Цена со скидкой, Кол-во, Сумма
         """
         radiator_rows = []
         bracket_rows = []
@@ -52,6 +52,14 @@ class SpecGenerator:
 
         radiators_df = self.data_provider.radiators_df
         brackets_df = self.data_provider.brackets_df
+
+        # Определяем значение для столбца «Тип монтажа» у радиаторов
+        if bracket_type == "Настенные кронштейны":
+            mount_value_for_radiators = "настенный"
+        elif bracket_type == "Напольные кронштейны":
+            mount_value_for_radiators = "напольный"
+        else:
+            mount_value_for_radiators = "без"
 
         for key, value in entry_values.items():
             if not value:
@@ -89,6 +97,7 @@ class SpecGenerator:
                     "Артикул": str(product['Артикул']).strip(),
                     "Наименование": name,
                     "Мощность, Вт": float(power) if power else 0.0,
+                    "Тип монтажа": mount_value_for_radiators,
                     "Цена, руб (с НДС)": price,
                     "Скидка, %": radiator_discount,
                     "Цена со скидкой, руб (с НДС)": disc_price,
@@ -103,7 +112,7 @@ class SpecGenerator:
                 # Расчёт кронштейнов
                 if bracket_type != "Без кронштейнов" and rad_type and height and length:
                     brackets = self._calculate_brackets(
-                        str(rad_type), length, height, bracket_type, qty
+                        str(rad_type), length, height, bracket_type, qty, conn
                     )
                     for art_b, qty_b in brackets:
                         mask_b = brackets_df['Артикул'] == art_b
@@ -130,7 +139,7 @@ class SpecGenerator:
         # Сортировка радиаторов: сначала VK, потом K, по типу, высоте, длине
         if radiator_rows:
             radiator_rows.sort(key=lambda x: (
-                0 if x["_connection"] == "VK" else 1,
+                0 if x["_connection"] in ["VK-правое", "VK-левое", "HV-правое", "HV-левое"] else 1,
                 x["_type"],
                 x["_height"],
                 x["_length"],
@@ -146,6 +155,7 @@ class SpecGenerator:
                     "Артикул": b["Артикул"],
                     "Наименование": b["Наименование"],
                     "Мощность, Вт": 0.0,
+                    "Тип монтажа": "",  # у кронштейнов — пусто
                     "Цена, руб (с НДС)": b["Цена, руб (с НДС)"],
                     "Скидка, %": bracket_discount,
                     "Цена со скидкой, руб (с НДС)": round(
@@ -163,13 +173,12 @@ class SpecGenerator:
         # Убираем служебные колонки
         df = pd.DataFrame(combined)
         columns = [
-            "№", "Артикул", "Наименование", "Мощность, Вт",
+            "№", "Артикул", "Наименование", "Мощность, Вт", "Тип монтажа",
             "Цена, руб (с НДС)", "Скидка, %",
             "Цена со скидкой, руб (с НДС)", "Кол-во",
             "Сумма, руб (с НДС)"
         ]
         return df[[c for c in columns if c in df.columns]]
-
     # ==================================================================
     # ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
     # ==================================================================
@@ -195,10 +204,14 @@ class SpecGenerator:
         except ValueError:
             return 0
 
+    # ==================================================================
+    # ИСПРАВЛЕННЫЙ МЕТОД _extract_params
+    # ==================================================================
+
     def _extract_params(self, name: str) -> Tuple[int, int, str, str]:
         """Извлекает высоту, длину, тип и подключение из названия."""
         height, length = 500, 1000
-        rad_type, conn = "10", "VK"
+        rad_type, conn = "10", "VK-правое"
 
         parts = name.split('/')
         if len(parts) >= 3:
@@ -220,21 +233,44 @@ class SpecGenerator:
             except (ValueError, IndexError):
                 pass
 
-        # Подключение
-        if 'VK' in name:
-            conn = "VK"
+        # ========== ИСПРАВЛЕНИЕ: правильно определяем подключение ==========
+        name_lower = name.lower()
+        
+        # Проверяем гигиенические радиаторы (HV и H)
+        if 'ventil hygiene (hv)' in name_lower:
+            # HV-нижнее правое или HV-нижнее левое
+            # Проверяем признаки левого подключения
+            if ' la' in name_lower or ' l ' in name_lower or name_lower.endswith(' la'):
+                conn = "HV-левое"
+            else:
+                conn = "HV-правое"
+        elif 'hygiene (h)' in name_lower:
+            conn = "H-боковое"
+        # Старые радиаторы
+        elif 'VK' in name:
+            if ' la' in name_lower or ' l ' in name_lower or name_lower.endswith(' la'):
+                conn = "VK-левое"
+            else:
+                conn = "VK-правое"
         elif 'K-' in name or 'K-Profil' in name:
-            conn = "K"
+            conn = "K-боковое"
+        else:
+            # По умолчанию
+            conn = "VK-правое"
 
         return height, length, rad_type, conn
 
+    # ==================================================================
+    # МЕТОД _calculate_brackets (с параметром connection)
+    # ==================================================================
+
     def _calculate_brackets(
         self, rad_type: str, length: int, height: int,
-        bracket_type: str, qty: int
+        bracket_type: str, qty: int, connection: str = "VK-правое"
     ) -> List[Tuple[str, int]]:
         """Рассчитывает кронштейны через BracketsCalculator."""
         from nextt.core.brackets import BracketsCalculator
-        return BracketsCalculator.calculate(rad_type, length, height, bracket_type, qty)
+        return BracketsCalculator.calculate(rad_type, length, height, bracket_type, connection, qty)
 
     def calculate_totals(self, spec_data: pd.DataFrame) -> Tuple[float, float, float]:
         """Рассчитывает общую мощность, вес и объём."""
@@ -242,19 +278,23 @@ class SpecGenerator:
         total_weight = 0.0
         total_volume = 0.0
 
-        radiators_df = self.data_provider.radiators_df
-
         for _, row in spec_data.iterrows():
             if "Кронштейн" in str(row["Наименование"]):
                 continue
             art = str(row["Артикул"]).strip()
             qty = int(row["Кол-во"])
-            mask = radiators_df['Артикул'].astype(str).str.strip() == art
-            if mask.any():
-                prod = radiators_df[mask].iloc[0]
-                total_power += float(prod.get('Мощность, Вт', 0)) * qty
-                total_weight += float(prod.get('Вес, кг', 0)) * qty
-                total_volume += float(prod.get('Объем, м3', 0)) * qty
+            
+            # Сначала ищем в обычных радиаторах (LaggarTT)
+            found = self.data_provider.find_by_article(art)
+            
+            # Если не найден — ищем в Метеор
+            if found is None:
+                found = self.data_provider.find_meteor_by_article(art)
+            
+            if found is not None:
+                total_power += float(found.get('Мощность, Вт', 0)) * qty
+                total_weight += float(found.get('Вес, кг', 0)) * qty
+                total_volume += float(found.get('Объем, м3', 0)) * qty
 
         return total_power, round(total_weight, 1), round(total_volume, 3)
 

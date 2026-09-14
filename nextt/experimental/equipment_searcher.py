@@ -335,30 +335,31 @@ class EquipmentSearcher:
 
     def _extract_article_simple(self, text: str) -> Optional[str]:
         """Простое извлечение артикула из текста с нормализацией."""
-        # Нормализуем текст для поиска артикулов
         normalized = self._normalize_article(text)
         
-        # Сначала ищем кронштейны
+        # Кронштейны
         bracket_patterns = [
             r'\b([КK]\d{1,2}\.\d{1,4}[A-Za-zА-Яа-я]?\d*)\b',
             r'\b([КK][НH][СC]\d{3,4})\b',
-            r'\b([КK]15[НH]\.\d{3,4})\b',
-            r'\b([КK]15\.\d{1,2})\b',
-            r'\b([КK]9\.\d[LRS]?)\b',
             r'\b(PLN\d+)\b',
         ]
         
         for pattern in bracket_patterns:
             match = re.search(pattern, normalized, re.IGNORECASE)
             if match:
-                article = match.group(1).strip()
-                logger.info(f"  Найден артикул кронштейна: '{article}'")
-                return article
+                return match.group(1).strip()
+        
+        # ========== НОВОЕ: 6000 как артикул (для ГАЗ 6000) ==========
+        # Проверяем, есть ли "6000" в тексте, и не является ли это частью другого числа
+        if re.search(r'\b6000\b', normalized):
+            # Если есть "6000" и есть H/C/RN — это ГАЗ 6000
+            if re.search(r'\b6000\s+\d{1,2}\s*[CH]', normalized, re.IGNORECASE):
+                # Не возвращаем артикул, пусть нормализатор обрабатывает
+                pass
         
         # Остальные паттерны
         patterns = [
             r'\b(1068\d{7})\b',
-            r'\b(10680\d{6})\b',
             r'\b(87323\d{6})\b',
             r'\b(8732\d{6})\b',
             r'\b(7[A-Z]\d{9})\b',

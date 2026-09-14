@@ -41,6 +41,8 @@ class DataProvider:
         self._file_path = file_path
         self._radiators_df: Optional[pd.DataFrame] = None
         self._brackets_df: Optional[pd.DataFrame] = None
+        self._radiators_meteor_df: Optional[pd.DataFrame] = None
+        self._meteor_loaded: bool = False  # Флаг, что данные Метеор загружены
         self._load()
 
     def _load(self) -> None:
@@ -118,6 +120,13 @@ class DataProvider:
                     self._radiators_df.at[idx, 'Connection'] = 'VK-правое'
             elif 'k-profil' in name:
                 self._radiators_df.at[idx, 'Connection'] = 'K-боковое'
+            elif 'ventil hygiene (hv)' in name:
+                if ' la' in name or ' l ' in name or name.endswith(' la'):
+                    self._radiators_df.at[idx, 'Connection'] = 'HV-левое'
+                else:
+                    self._radiators_df.at[idx, 'Connection'] = 'HV-правое'
+            elif 'hygiene (h)' in name:
+                self._radiators_df.at[idx, 'Connection'] = 'H-боковое'
             else:
                 if name.endswith(' la') or ' la' in name:
                     self._radiators_df.at[idx, 'Connection'] = 'VK-левое'
@@ -133,6 +142,32 @@ class DataProvider:
                 if type_match2:
                     self._radiators_df.at[idx, 'RadiatorType'] = type_match2.group(1)
 
+    def _load_meteor_data(self) -> None:
+        """
+        Ленивая загрузка листа "Радиаторы Метеор".
+        Загружает данные только при первом вызове.
+        """
+        if self._meteor_loaded:
+            return
+
+        try:
+            all_sheets = pd.read_excel(self._file_path, sheet_name=None, engine='openpyxl')
+            
+            if "Радиаторы Метеор" in all_sheets:
+                self._radiators_meteor_df = all_sheets["Радиаторы Метеор"].copy()
+                self._radiators_meteor_df['Артикул'] = self._radiators_meteor_df['Артикул'].astype(str).str.strip()
+                self._meteor_loaded = True
+                logger.info(f"Загружено радиаторов Метеор: {len(self._radiators_meteor_df)}")
+            else:
+                self._radiators_meteor_df = pd.DataFrame()
+                self._meteor_loaded = True
+                logger.warning("Лист 'Радиаторы Метеор' не найден")
+                
+        except Exception as e:
+            logger.error(f"Ошибка загрузки данных Метеор: {e}")
+            self._radiators_meteor_df = pd.DataFrame()
+            self._meteor_loaded = True
+
     # ======================================================================
     # Публичные методы
     # ======================================================================
@@ -146,6 +181,17 @@ class DataProvider:
     def brackets_df(self) -> pd.DataFrame:
         """Возвращает копию DataFrame с кронштейнами."""
         return self._brackets_df.copy()
+
+    @property
+    def radiators_meteor_df(self) -> pd.DataFrame:
+        """
+        Возвращает копию DataFrame с радиаторами Метеор.
+        При первом вызове загружает данные из файла.
+        """
+        self._load_meteor_data()
+        if self._radiators_meteor_df is None:
+            return pd.DataFrame()
+        return self._radiators_meteor_df.copy()
 
     def filter_radiators(
         self,
@@ -196,6 +242,28 @@ class DataProvider:
             return matches.iloc[0]
         return None
 
+    def find_meteor_by_article(self, article: str) -> Optional[pd.Series]:
+        """
+        Находит радиатор Метеор по артикулу.
+        При первом вызове загружает данные из файла.
+
+        Args:
+            article: артикул радиатора Метеор
+
+        Returns:
+            Series с данными радиатора или None
+        """
+        article_clean = str(article).strip()
+        # При первом вызове загружает данные
+        df = self.radiators_meteor_df
+        if df.empty:
+            return None
+        mask = df['Артикул'].astype(str).str.strip() == article_clean
+        matches = df[mask]
+        if not matches.empty:
+            return matches.iloc[0]
+        return None
+
     def find_analog(
         self,
         connection: str,
@@ -222,13 +290,12 @@ class DataProvider:
             type_int = 21
             rad_type = "21"
 
-            # ================================================================
+        # ================================================================
         # ФИКС: универсальные типы (20,21,22) не имеют левого/правого исполнения
         # VK-левое автоматически заменяем на VK-правое
         # ================================================================
         if connection == "VK-левое" and str(type_int) in ('20', '21', '22'):
             connection = "VK-правое"
-
 
         # ================================================================
         # ПРЕОБРАЗОВАНИЕ ВЫСОТЫ (код → миллиметры)
