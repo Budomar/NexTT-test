@@ -711,53 +711,173 @@ class PasteDialog:
             return
 
         df = None
-        
-        # Определяем формат
-        is_list = False
+
+        # ================================================================
+        # РЕЖИМ "СПИСОК" — каждая строка как отдельная позиция
+        # ================================================================
         if format_mode == "list":
-            is_list = True
-        elif format_mode == "table":
-            is_list = False
-        else:  # auto
-            is_list = self._is_list_format(non_empty_lines)
-        
-        if is_list:
-            # Парсим как список
             df = self._parse_list_format(non_empty_lines)
             if df is not None and not df.empty:
-                # Для списка автоматически определяем колонки
                 self._df = df
                 self._show_preview(df)
-                
-                # Устанавливаем колонки для выбора
                 columns = ["Наименование", "Кол-во"]
                 self._name_col_combo["values"] = columns
                 self._qty_col_combo["values"] = columns
                 self._name_col_combo.current(0)
                 self._qty_col_combo.current(1)
                 self._on_selection_changed()
-                
                 self._info_label.config(text=f"Разобрано: {len(df)} строк, 2 столбца (список)")
                 return
-        else:
-            # Парсим как таблицу
+
+        # ================================================================
+        # РЕЖИМ "ТАБЛИЦА" — все строки как таблица
+        # ================================================================
+        if format_mode == "table":
             delimiter = self._detect_delimiter(non_empty_lines)
             df = self._parse_table_format(non_empty_lines, delimiter)
-        
-        if df is None or df.empty:
+            if df is None or df.empty:
+                messagebox.showwarning("Предупреждение", "Не удалось разобрать данные")
+                return
+            self._df = df
+            self._show_preview(df)
+            columns = [f"Col_{i}" for i in range(len(df.columns))]
+            self._name_col_combo["values"] = columns
+            self._qty_col_combo["values"] = columns
+            self._auto_detect_columns(df)
+            self._info_label.config(text=f"Разобрано: {len(df)} строк, {len(df.columns)} столбцов")
+            return
+
+        # ================================================================
+        # АВТО-РЕЖИМ: разбираем КАЖДУЮ СТРОКУ по её собственному формату
+        # ================================================================
+        # Если в строке есть табуляция ИЛИ >= 2 подряд идущих пробелов,
+        # ИЛИ разделитель `|`/`;`/`,` (в табличном контексте) — таблица.
+        # Иначе — список: "название ... количество"
+        rows = []
+        for line in non_empty_lines:
+            line_stripped = line.strip()
+            if not line_stripped:
+                continue
+
+            # Строка-таблица: есть табуляция
+            if '\t' in line_stripped:
+                parts = [p.strip() for p in line_stripped.split('\t') if p.strip()]
+                if parts:
+                    rows.append(parts)
+                continue
+
+            # Строка-таблица: есть `|`
+            if '|' in line_stripped:
+                parts = [p.strip() for p in line_stripped.split('|') if p.strip()]
+                if parts:
+                    rows.append(parts)
+                continue
+
+            # Строка-список: "название — N шт" или "название N"
+            # Извлекаем количество и название
+            name, qty = self._split_list_line(line_stripped)
+            rows.append([name, str(qty)])
+
+        if not rows:
             messagebox.showwarning("Предупреждение", "Не удалось разобрать данные")
             return
 
+        # Выравниваем строки по максимальному числу столбцов
+        max_cols = max(len(r) for r in rows)
+        for r in rows:
+            while len(r) < max_cols:
+                r.append("")
+
+        df = pd.DataFrame(rows)
+        df = df.replace(r'^\s*$', '', regex=True)
+        df = df.fillna('')
+
         self._df = df
         self._show_preview(df)
-
         columns = [f"Col_{i}" for i in range(len(df.columns))]
         self._name_col_combo["values"] = columns
         self._qty_col_combo["values"] = columns
         self._auto_detect_columns(df)
-
         self._info_label.config(text=f"Разобрано: {len(df)} строк, {len(df.columns)} столбцов")
 
+    def _split_list_line(self, line: str) -> Tuple[str, int]:
+        """
+        Всеядный разбор строки "название ... количество".
+
+        Логика:
+            1. Нормализуем строку (тире, пробелы).
+            2. Ищем ВСЕ числа в строке.
+            3. Количество = последнее число в конце строки,
+               если оно отделено от остального текста (пробелом,
+               тире, знаком равенства или другим не-буквенным символом).
+            4. Название = всё, что до этого числа.
+
+        Работает без знания конкретных слов ("шт", "штука", "pcs" и т.п.).
+        """
+        if not line:
+            return "", 0
+
+        s = line.strip()
+
+        # Все виды тире → обычный дефис (для унификации поиска)
+        for dash in ['–', '—', '‐', '‑', '‒', '\u00ad']:
+            s = s.replace(dash, '-')
+
+        # Схлопываем множественные пробелы
+        s = re.sub(r'\s+', ' ', s)
+
+        # ============================================================
+        # Ищем ПАТТЕРН: "название ... <разделитель> N [хвост]"
+        # где разделитель — пробел, дефис, "=", "х"
+        # а N — целое число 1..99999
+        # хвост — любые нецифровые символы (шт, штука, pcs, щтука и т.п.)
+        # ============================================================
+
+        # Пробуем найти "число, за которым нет других чисел"
+        # (то есть последнее число в строке)
+        all_numbers = list(re.finditer(r'\b(\d{1,5})\b', s))
+
+        if not all_numbers:
+            # Нет ни одного числа — не можем извлечь количество
+            return s, 0
+
+        # Берём последнее число
+        last_match = all_numbers[-1]
+        qty_str = last_match.group(1)
+
+        try:
+            qty = int(qty_str)
+        except (ValueError, TypeError):
+            return s, 0
+
+        if qty <= 0:
+            return s, 0
+
+        # Проверяем: то, что СЛЕДУЕТ за числом — это только
+        # "мусор" (шт, штука, точки, пробелы, буквы)?
+        # Если после числа снова есть цифры — это НЕ количество
+        # (например, "B30-24H" — 24 это мощность, а не количество)
+        tail = s[last_match.end():]
+
+        # Если в хвосте есть ещё цифры — мы взяли не то число
+        if re.search(r'\d', tail):
+            return s, 0
+
+        # Хвост должен быть коротким (до 15 символов — хватит на "штук", "pcs", "ед." и т.п.)
+        # Если хвост длиннее — возможно, это часть названия
+        if len(tail.strip()) > 15:
+            return s, 0
+
+        # Всё, что ДО числа — это название (убираем висячие разделители)
+        name = s[:last_match.start()].strip()
+        # Убираем висячий дефис, "=", "х" в конце названия
+        name = re.sub(r'[\s\-=хx]+$', '', name).strip()
+
+        if not name:
+            return s, qty
+
+        return name, qty
+        
     def _show_preview(self, df: pd.DataFrame) -> None:
         """Показывает предпросмотр DataFrame в таблице."""
         self._preview_tree.delete(*self._preview_tree.get_children())

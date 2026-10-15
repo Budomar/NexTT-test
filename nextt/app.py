@@ -56,16 +56,16 @@ class App:
 
     def __init__(self):
         # --- Логирование ---
-        setup_logger(level="INFO", log_file=None)
+        setup_logger(level="ERROR", log_file=None)
         
         logger.info("=" * 60)
-        logger.info("Запуск NexTT 2.7")
+        logger.info("Запуск NexTT 3.1")
         logger.info("=" * 60)
 
         # --- Root-окно (ПОЛНОСТЬЮ СКРЫТО до готовности) ---
         self.root = tk.Tk()
         self.root.withdraw()
-        self.root.title("NexTT 2.7")
+        self.root.title("NexTT 3.1")
 
         # --- Настройка DPI ---
         cache_scale(self.root)
@@ -98,6 +98,9 @@ class App:
         self.radiator_type_var = tk.StringVar(value="10")
         self.entry_values: dict = {}
 
+        # --- Температурный график (только в памяти, не сохраняется) ---
+        self.temperature_graph = {"supply": 95, "return": 85, "room": 20}
+
         # --- Загружаем сохранённую геометрию окна ---
         self._load_window_geometry()
 
@@ -117,6 +120,8 @@ class App:
         self._last_correspondence_data = None
         self._all_correspondence_data_for_export = None   
         self._last_imported_file = None
+        self._last_section_to_panel_dialog = None
+        self._last_active_scenario = None
 
         # --- Генератор спецификаций ---
         from nextt.export.spec_generator import SpecGenerator
@@ -154,8 +159,8 @@ class App:
 
         self.window_x = 0
         self.window_y = 0
-        self.window_width = 1913
-        self.window_height = 329
+        self.window_width = 1915
+        self.window_height = 400
         self.window_zoomed = False
 
         if os.path.exists(settings_path):

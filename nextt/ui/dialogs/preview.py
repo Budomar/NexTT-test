@@ -17,6 +17,7 @@ import pandas as pd
 from nextt.logger import get_logger
 from nextt.utils.window_manager import get_safe_geometry
 from nextt.core.brackets import BracketsCalculator
+from nextt.core.power_recalculator import PowerRecalculator
 
 logger = get_logger(__name__)
 
@@ -31,6 +32,9 @@ class PreviewDialog:
         self._dialog: Optional[tk.Toplevel] = None
         self._tree: Optional[ttk.Treeview] = None
         self._spec_data: Optional[pd.DataFrame] = None
+
+        # Откуда открыт предпросмотр: None / "main_window" / "section_to_panel"
+        self._source: Optional[str] = None
 
         # Ссылки на метки итогов
         self._power_label: Optional[ttk.Label] = None
@@ -60,8 +64,6 @@ class PreviewDialog:
         self._last_hover_item: Optional[str] = None
 
         # ========== ЧЕКБОКС ДЛЯ УПРАВЛЕНИЯ КАРТИНКАМИ ==========
-        # Загружаем сохранённое значение из settings.json
-        # (по умолчанию True, если ключа ещё нет)
         from nextt.config import config
         saved_show_images = config.get("preview_show_images", True)
         self._show_images_var = tk.BooleanVar(value=bool(saved_show_images))
@@ -72,12 +74,33 @@ class PreviewDialog:
         # ========== СЛОВАРЬ СВЯЗЕЙ КРОНШТЕЙН → РАДИАТОРЫ ==========
         self._bracket_to_radiators: Dict[str, List[str]] = {}
         # ========== АРТИКУЛЫ РУЧНЫХ КРОНШТЕЙНОВ ==========
-        # Приложение само запоминает, какие кронштейны добавлены вручную
         self._manual_bracket_articles: set = set()
+        # ========== ТЕМПЕРАТУРНЫЙ НАПОР ДЛЯ ОТОБРАЖЕНИЯ В ШАПКЕ ==========
+        self._delta_t: float = 70.0
+        # Ссылка на метку температурного графика в шапке (для обновления при смене Δt)
+        self._graph_info_label: Optional[ttk.Label] = None
 
-    def show(self, spec_data: pd.DataFrame) -> None:
-        """Показывает окно предпросмотра."""
+    def show(self, spec_data: pd.DataFrame, delta_t: float = 70.0,
+             source: Optional[str] = None) -> None:
+        """
+        Показывает окно предпросмотра.
+
+        Args:
+            spec_data: DataFrame со спецификацией
+            delta_t: температурный напор, °С.
+                     Используется ТОЛЬКО для отображения графика в шапке.
+                     Сам пересчёт мощностей уже выполнен в SpecGenerator.
+            source: откуда открыт предпросмотр.
+                    None или "main_window" — из главного окна;
+                    "section_to_panel" — из окна «Замена секционных».
+        """
         if self._dialog and self._dialog.winfo_exists():
+            # ================================================================
+            # Окно уже открыто — обновляем Δt и шапку, чтобы экспорт в Excel
+            # использовал актуальный температурный график, а не устаревший.
+            # ================================================================
+            self._delta_t = float(delta_t)
+            self._refresh_graph_header()
             self._dialog.lift()
             self._dialog.focus_force()
             return
@@ -86,9 +109,52 @@ class PreviewDialog:
             messagebox.showwarning("Предпросмотр", "Нет данных для спецификации.")
             return
 
+        # Сохраняем Δt для отображения в шапке
+        self._delta_t = float(delta_t)
+
+        # Запоминаем, откуда открыт предпросмотр
+        self._source = source
+
         self._spec_data = spec_data.copy()
         self._ensure_mount_type_column()
         self._create_dialog()
+
+    def _refresh_graph_header(self) -> None:
+        """
+        Обновляет текст метки температурного графика в шапке окна,
+        если она уже создана. Вызывается, когда окно предпросмотра
+        уже открыто, а пользователь поменял график в главном окне.
+        """
+        if not hasattr(self, '_graph_info_label') or self._graph_info_label is None:
+            return
+        try:
+            if not self._graph_info_label.winfo_exists():
+                return
+        except tk.TclError:
+            return
+
+        graph = self.app.temperature_graph
+        graph_str = f"{graph.get('supply', 95)}/{graph.get('return', 85)}/{graph.get('room', 20)}"
+        delta_str = f"{self._delta_t:.2f}".replace('.', ',')
+
+        if PowerRecalculator.is_reference(self._delta_t):
+            graph_text = (
+                f"Температурный график: {graph_str} °С  "
+                f"(Δt = {delta_str} °С, эталон ГОСТ 31311-2022)"
+            )
+            graph_color = "#2c3e50"
+        else:
+            graph_text = (
+                f"Температурный график: {graph_str} °С  "
+                f"(Δt = {delta_str} °С, ПЕРЕСЧЁТ по ГОСТ 31311-2022: "
+                f"Q = Qном × (Δt/70)ⁿ)"
+            )
+            graph_color = "#d35400"
+
+        try:
+            self._graph_info_label.config(text=graph_text, foreground=graph_color)
+        except tk.TclError:
+            pass
 
     def _create_dialog(self) -> None:
         """Создаёт окно предпросмотра."""
@@ -115,6 +181,37 @@ class PreviewDialog:
 
         main_frame = ttk.Frame(self._dialog)
         main_frame.pack(fill="both", expand=True, padx=15, pady=15)
+
+        # --- Шапка с температурным графиком ---
+        graph_info_frame = ttk.Frame(main_frame)
+        graph_info_frame.pack(fill="x", pady=(0, 10))
+
+        graph = self.app.temperature_graph
+        graph_str = f"{graph.get('supply', 95)}/{graph.get('return', 85)}/{graph.get('room', 20)}"
+        delta_str = f"{self._delta_t:.2f}".replace('.', ',')
+
+        if PowerRecalculator.is_reference(self._delta_t):
+            graph_text = (
+                f"Температурный график: {graph_str} °С  "
+                f"(Δt = {delta_str} °С, эталон ГОСТ 31311-2022)"
+            )
+            graph_color = "#2c3e50"
+        else:
+            graph_text = (
+                f"Температурный график: {graph_str} °С  "
+                f"(Δt = {delta_str} °С, ПЕРЕСЧЁТ по ГОСТ 31311-2022: Q = Qном × (70/{self._delta_t:.0f})ⁿ)"
+            )
+            graph_color = "#d35400"
+
+        # ========== СОХРАНЯЕМ ССЫЛКУ НА МЕТКУ ГРАФИКА ==========
+        self._graph_info_label = ttk.Label(
+            graph_info_frame,
+            text=graph_text,
+            font=bold_font,
+            foreground=graph_color,
+            background="#f5f5f5"
+        )
+        self._graph_info_label.pack(anchor="w")
 
         # --- Таблица ---
         tree_frame = ttk.Frame(main_frame)
@@ -155,12 +252,10 @@ class PreviewDialog:
 
         # ========== ТЕГИ С ЯВНЫМ УКАЗАНИЕМ ШРИФТА ==========
         self._tree.tag_configure("radiator", background="#fafafa", font=default_font)
-        # ========== НОВЫЙ ТЕГ ДЛЯ ГИГИЕНИЧЕСКИХ РАДИАТОРОВ (ЗЕЛЁНЫЙ ТЕКСТ) ==========
         self._tree.tag_configure("hygiene", background="#fafafa", font=default_font, foreground="#008000")
         self._tree.tag_configure("bracket", background="#ededed", font=default_font)
         self._tree.tag_configure("bracket_hover", background="#c8c8c8", font=bold_font)
         self._tree.tag_configure("total", background="#d9d9d9", font=bold_font)
-        # ========== НОВЫЕ ТЕГИ ДЛЯ ПОДСВЕТКИ СВЯЗАННЫХ РАДИАТОРОВ ==========
         self._tree.tag_configure("radiator_related", background="#c8c8c8", font=default_font)
         self._tree.tag_configure("hygiene_related", background="#c8c8c8", font=default_font, foreground="#008000")
 
@@ -170,23 +265,18 @@ class PreviewDialog:
                 if not self._dialog or not self._dialog.winfo_exists():
                     return
 
-                # ========== ИСПРАВЛЕНИЕ: проверяем, что окно в фокусе и активно ==========
-                # Если окно свёрнуто, скрыто или не активно — не показываем картинки
                 if not self._dialog.winfo_viewable() or self._dialog.state() == 'withdrawn' or self._dialog.state() == 'iconic':
                     self._hide_bracket_image_immediate()
                     if self._dialog and self._dialog.winfo_exists():
                         self._dialog.after(200, check_hover)
                     return
 
-                # Проверяем, что окно имеет фокус (активно)
                 if not self._dialog.focus_get():
                     self._hide_bracket_image_immediate()
                     if self._dialog and self._dialog.winfo_exists():
                         self._dialog.after(200, check_hover)
                     return
-                # =====================================================================
 
-                # Получаем положение мыши относительно Treeview
                 tree_x = self._tree.winfo_rootx()
                 tree_y = self._tree.winfo_rooty()
                 tree_w = self._tree.winfo_width()
@@ -195,7 +285,6 @@ class PreviewDialog:
                 mouse_x = self._tree.winfo_pointerx()
                 mouse_y = self._tree.winfo_pointery()
 
-                # Проверяем, находится ли мышь внутри Treeview
                 if (tree_x <= mouse_x <= tree_x + tree_w and
                     tree_y <= mouse_y <= tree_y + tree_h):
 
@@ -274,11 +363,9 @@ class PreviewDialog:
         self._tree.bind("<Button-3>", self._show_context_menu)
 
         # --- НИЖНЯЯ ПАНЕЛЬ (ПЕРЕКОМПОНОВАНА) ---
-        # ========== СОЗДАЁМ ЕДИНЫЙ ФРЕЙМ С РАМКОЙ ==========
         bottom_frame = tk.Frame(main_frame, relief="solid", borderwidth=1, bg='#dedede')
         bottom_frame.pack(fill="x", pady=10)
 
-        # Внутренний фрейм для содержимого (с отступами)
         inner_frame = tk.Frame(bottom_frame, bg='#dedede')
         inner_frame.pack(fill="x", padx=10, pady=8)
 
@@ -387,7 +474,7 @@ class PreviewDialog:
             ttk.Button(add_frame, text="Добавить",
                        command=self._add_bracket).pack(side="left", padx=5)
 
-        # ========== НОВАЯ КНОПКА "Конв-ть в Метеор" / "Конв-ть в LaggarTT" ==========
+        # ========== КНОПКА "Конв-ть в Метеор" / "Конв-ть в LaggarTT" ==========
         self._convert_btn_frame = tk.Frame(add_frame, bg='#7E1A2F', relief='raised', borderwidth=2)
         self._convert_btn_frame.pack(side="left", padx=5)
 
@@ -417,11 +504,37 @@ class PreviewDialog:
         ttk.Button(btn_frame, text="Экспорт в Excel",
                    command=self._export).pack(side="right", padx=5)
 
-        ttk.Button(btn_frame, text="Назад к подбору аналогов",
-                   command=self._back_to_correspondence).pack(side="right", padx=5)
+        # ========== КНОПКИ «НАЗАД…» — ЗАВИСЯТ ОТ СЦЕНАРИЯ ==========
+        # source приходит из main_window._on_preview:
+        #   "section_to_panel" — из окна «Замена секционных»
+        #   "foreign"          — из чужой спецификации
+        #   None               — ручной ввод в матрицу
+        source = getattr(self, '_source', None)
 
-        ttk.Button(btn_frame, text="Назад к выбору столбцов",
-                   command=self._back_to_column_selector).pack(side="right", padx=5)
+        if source == "section_to_panel":
+            # Возврат в окно «Замена секционных радиаторов»
+            ttk.Button(
+                btn_frame,
+                text="Назад к замене секционных",
+                command=self._back_to_section_to_panel,
+            ).pack(side="right", padx=5)
+
+        elif source == "foreign":
+            # Возврат к таблице соответствия (подбор аналогов)
+            # и к выбору столбцов (повторный импорт файла)
+            ttk.Button(
+                btn_frame,
+                text="Назад к подбору аналогов",
+                command=self._back_to_correspondence,
+            ).pack(side="right", padx=5)
+
+            ttk.Button(
+                btn_frame,
+                text="Назад к выбору столбцов",
+                command=self._back_to_column_selector,
+            ).pack(side="right", padx=5)
+
+        # Если source None — ручной ввод в матрицу, кнопок «Назад…» нет.
 
         # ========== ГОРЯЧАЯ КЛАВИША ==========
         self._dialog.bind("<Control-Shift-C>", lambda e: self._change_connection())
@@ -1609,17 +1722,10 @@ class PreviewDialog:
         if not self._tree:
             return
 
-        try:
-            rad_disc = float(self._radiator_discount_var.get() or "0")
-            rad_disc = max(0.0, min(100.0, rad_disc))
-        except (ValueError, TypeError):
-            rad_disc = 0.0
+        from nextt.ui.main_window_utils import parse_discount
 
-        try:
-            br_disc = float(self._bracket_discount_var.get() or "0")
-            br_disc = max(0.0, min(100.0, br_disc))
-        except (ValueError, TypeError):
-            br_disc = 0.0
+        rad_disc = parse_discount(self._radiator_discount_var.get())
+        br_disc = parse_discount(self._bracket_discount_var.get())
 
         def fmt_money(v):
             try:
@@ -2411,8 +2517,9 @@ class PreviewDialog:
                 continue
 
             try:
-                qty = int(values[7]) if values[7] and values[7].isdigit() else 0
-            except (ValueError, TypeError):
+                qty_str = str(values[8]).strip() if values[8] else "0"
+                qty = int(qty_str)
+            except (ValueError, TypeError, IndexError):
                 qty = 0
 
             items_data.append({
@@ -2660,53 +2767,26 @@ class PreviewDialog:
                 self._dialog.focus_force()
                 self._dialog.grab_set()
 
-        btn_right = tk.Button(
+        ttk.Button(
             frame,
             text="Правое (рекомендуется)",
             command=on_right,
             width=25,
-            height=1,
-            bg='#263168',
-            fg='white',
-            font=self.font_manager.get_default_font(),
-            relief="flat",
-            cursor="hand2",
-            activebackground='#7E1A2F',
-            activeforeground='white'
-        )
-        btn_right.pack(pady=5)
+        ).pack(pady=5)
 
-        btn_left = tk.Button(
+        ttk.Button(
             frame,
             text="Левое",
             command=on_left,
             width=25,
-            height=1,
-            bg='#263168',
-            fg='white',
-            font=self.font_manager.get_default_font(),
-            relief="flat",
-            cursor="hand2",
-            activebackground='#7E1A2F',
-            activeforeground='white'
-        )
-        btn_left.pack(pady=5)
+        ).pack(pady=5)
 
-        btn_cancel = tk.Button(
+        ttk.Button(
             frame,
             text="Отмена",
             command=on_cancel,
             width=25,
-            height=1,
-            bg='#888888',
-            fg='white',
-            font=self.font_manager.get_default_font(),
-            relief="flat",
-            cursor="hand2",
-            activebackground='#7E1A2F',
-            activeforeground='white'
-        )
-        btn_cancel.pack(pady=5)
+        ).pack(pady=5)
 
         def on_dialog_close():
             result["value"] = None
@@ -2925,54 +3005,27 @@ class PreviewDialog:
                 self._dialog.focus_force()
                 self._dialog.grab_set()
 
-        btn_side = tk.Button(
+        ttk.Button(
             frame,
             text="Переключить на боковое",
             command=on_side,
             width=30,
-            height=1,
-            bg='#263168',
-            fg='white',
-            font=self.font_manager.get_default_font(),
-            relief="flat",
-            cursor="hand2",
-            activebackground='#7E1A2F',
-            activeforeground='white'
-        )
-        btn_side.pack(pady=5)
+        ).pack(pady=5)
 
         if has_swappable:
-            btn_swap = tk.Button(
+            ttk.Button(
                 frame,
                 text="Сменить сторону (правое ↔ левое)",
                 command=on_swap,
                 width=30,
-                height=1,
-                bg='#263168',
-                fg='white',
-                font=self.font_manager.get_default_font(),
-                relief="flat",
-                cursor="hand2",
-                activebackground='#7E1A2F',
-                activeforeground='white'
-            )
-            btn_swap.pack(pady=5)
+            ).pack(pady=5)
 
-        btn_cancel = tk.Button(
+        ttk.Button(
             frame,
             text="Отмена",
             command=on_cancel,
             width=30,
-            height=1,
-            bg='#888888',
-            fg='white',
-            font=self.font_manager.get_default_font(),
-            relief="flat",
-            cursor="hand2",
-            activebackground='#7E1A2F',
-            activeforeground='white'
-        )
-        btn_cancel.pack(pady=5)
+        ).pack(pady=5)
 
         def on_dialog_close():
             result["value"] = None
@@ -2985,6 +3038,39 @@ class PreviewDialog:
 
         dialog.wait_window()
         return result["value"]
+
+    def _back_to_section_to_panel(self) -> None:
+        """
+        Закрывает окно предпросмотра и возвращает пользователя
+        в окно «Замена секционных радиаторов».
+
+        Если окно уже существует (даже скрытое) — показывает его,
+        сохраняя все данные. Если оно было уничтожено — создаёт новое.
+        """
+        app = self.app
+
+        self._close()
+
+        # Проверяем, есть ли живой объект окна «Замена секционных»
+        existing_dialog = getattr(app, '_last_section_to_panel_dialog', None)
+
+        if existing_dialog is not None:
+            try:
+                # show() сам поймёт: если окно создано — deiconify + lift,
+                # если нет — создаст новое
+                existing_dialog.show()
+                return
+            except Exception as e:
+                logger.debug(f"Не удалось показать окно «Замена секционных»: {e}")
+
+        # Если объекта нет — создаём новый
+        try:
+            from nextt.ui.dialogs.section_to_panel import SectionToPanelDialog
+            new_dialog = SectionToPanelDialog(app)
+            app._last_section_to_panel_dialog = new_dialog
+            new_dialog.show()
+        except Exception as e:
+            logger.debug(f"Не удалось открыть окно «Замена секционных»: {e}")
 
     def _back_to_column_selector(self) -> None:
         if not hasattr(self.app, '_last_raw_data') or self.app._last_raw_data is None:
@@ -3024,6 +3110,102 @@ class PreviewDialog:
                         self.app._last_raw_data, name_col, qty_col, file_path, append_mode=True
                     )
 
+    def _get_spec_file_path(self, base_name: str = "Расчёт стоимости") -> str:
+        """
+        Формирует путь для сохранения спецификации (в окне предпросмотра).
+
+        Логика (в порядке приоритета имени):
+            • Папка: ~/Downloads/NexTT/ (или ~/Загрузки/NexTT, или ~/NexTT)
+            • Если поле «Проект» заполнено:
+                имя: {base_name}_{Проект}
+            • Иначе, если был загружен внешний файл:
+                имя: {base_name}_{имя_исходного_файла_без_расширения}
+            • Иначе:
+                имя: {base_name}_{ДД.ММ.ГГ}
+            • При конфликте имён добавляется суффикс " (1)", " (2)" и т.д.
+
+        Дополнительно:
+            • Недопустимые символы и переносы строк заменяются на подчёркивание.
+            • Итоговое имя обрезается, если слишком длинное.
+        """
+        import re
+        from pathlib import Path
+        from datetime import datetime
+
+        # --- Папка ---
+        downloads = Path.home() / "Downloads"
+        if not downloads.exists():
+            downloads = Path.home() / "Загрузки"
+        if not downloads.exists():
+            downloads = Path.home()
+
+        nextt_folder = downloads / "NexTT"
+        nextt_folder.mkdir(exist_ok=True)
+
+        # --- Приоритет 1: проект ---
+        project_name = ""
+        try:
+            if hasattr(self.app, 'main_window') and hasattr(self.app.main_window, 'project_var'):
+                project_name = (self.app.main_window.project_var.get() or "").strip()
+        except Exception:
+            project_name = ""
+
+        file_base = None
+
+        if project_name:
+            cleaned_project = self._sanitize_filename_part(project_name)
+            if cleaned_project:
+                file_base = f"{base_name}_{cleaned_project}"
+
+        # --- Приоритет 2: имя исходного файла ---
+        if file_base is None:
+            source_name = None
+            if hasattr(self.app, '_last_file_path') and self.app._last_file_path:
+                try:
+                    stem = Path(self.app._last_file_path).stem
+                    source_name = self._sanitize_filename_part(stem)
+                except Exception:
+                    source_name = None
+
+            if source_name:
+                file_base = f"{base_name}_{source_name}"
+
+        # --- Приоритет 3: дата ---
+        if file_base is None:
+            date_str = datetime.now().strftime("%d.%m.%y")
+            file_base = f"{base_name}_{date_str}"
+
+        # --- Ограничение длины базового имени ---
+        MAX_BASE_NAME_LEN = 120
+        if len(file_base) > MAX_BASE_NAME_LEN:
+            file_base = file_base[:MAX_BASE_NAME_LEN - 1].rstrip() + "…"
+
+        # --- Защита от перезаписи ---
+        file_path = nextt_folder / f"{file_base}.xlsx"
+        counter = 1
+        while file_path.exists():
+            file_path = nextt_folder / f"{file_base} ({counter}).xlsx"
+            counter += 1
+            if counter > 100000:
+                raise Exception("Не удалось создать уникальное имя файла")
+
+        return str(file_path)
+
+    @staticmethod
+    def _sanitize_filename_part(value: str) -> str:
+        """
+        Очищает строку для использования в имени файла.
+        Заменяет недопустимые символы и переносы строк на подчёркивание.
+        """
+        import re
+        if not value:
+            return ""
+        result = re.sub(r'[\\/:*?"<>|\r\n\t]+', '_', str(value))
+        result = re.sub(r'_+', '_', result)
+        result = re.sub(r'\s+', ' ', result)
+        result = result.strip('._ ')
+        return result
+        
     def _export(self) -> None:
         try:
             if self._spec_data is None or self._spec_data.empty:
@@ -3033,31 +3215,11 @@ class PreviewDialog:
             # Убеждаемся, что столбец «Тип монтажа» есть (его добавит ExcelWriter)
             self._ensure_mount_type_column()
 
-            downloads_folder = Path.home() / "Downloads"
-            if not downloads_folder.exists():
-                downloads_folder = Path.home() / "Загрузки"
-            if not downloads_folder.exists():
-                downloads_folder = Path.home()
-
-            nextt_folder = downloads_folder / "NexTT"
-            nextt_folder.mkdir(exist_ok=True)
-
-            logger.info(f"Папка для сохранения: {nextt_folder}")
-
-            from datetime import datetime
-            now = datetime.now()
-            date_str = now.strftime("%Y-%m-%d")
-            time_str = now.strftime("%H-%M")
-
-            base_name = f"Расчёт стоимости_{date_str}_{time_str}"
-            file_path = nextt_folder / f"{base_name}.xlsx"
-
-            counter = 1
-            while file_path.exists():
-                file_path = nextt_folder / f"{base_name}_{counter}.xlsx"
-                counter += 1
-
-            logger.info(f"Сохраняем в: {file_path}")
+            # ============================================================
+            # Формируем путь сохранения (новая логика)
+            # ============================================================
+            file_path = self._get_spec_file_path()
+            logger.info(f"Сохранение спецификации (предпросмотр): {file_path}")
 
             from nextt.export.excel_writer import ExcelWriter
             writer = ExcelWriter(data_provider=self.app.data_provider)
@@ -3089,33 +3251,89 @@ class PreviewDialog:
                     correspondence_df = dialog.get_correspondence_data()
                     logger.info(f"Экспорт: используем данные из диалога, {len(correspondence_df) if correspondence_df is not None else 0} строк")
 
-            writer.save(self._spec_data, str(file_path), correspondence_data=correspondence_df, program_name=self.app.root.title())
+            # ================================================================
+            # Формируем метаданные графика для шапки Excel.
+            # Берём АКТУАЛЬНЫЙ Δt из главного окна, а не сохранённый self._delta_t,
+            # т.к. пользователь мог поменять график уже после открытия окна
+            # предпросмотра. Это гарантирует корректный пересчёт «Мощность расчётная»
+            # на листе «Таблица соответствия».
+            # ================================================================
+            try:
+                actual_delta_t = self.app.main_window._current_delta_t()
+            except Exception:
+                actual_delta_t = self._delta_t
+
+            # Синхронизируем внутренний self._delta_t с актуальным,
+            # чтобы при повторном экспорте использовалось то же значение.
+            self._delta_t = float(actual_delta_t)
+
+            graph = self.app.temperature_graph
+            graph_meta = {
+                "supply": graph.get("supply", 95),
+                "return": graph.get("return", 85),
+                "room":   graph.get("room",   20),
+                "delta_t": actual_delta_t,
+                "is_reference": PowerRecalculator.is_reference(actual_delta_t),
+            }
+
+            from nextt.ui.main_window_utils import parse_discount
+
+            writer.save(
+                self._spec_data,
+                file_path,
+                correspondence_data=correspondence_df,
+                program_name=self.app.root.title(),
+                graph_meta=graph_meta,
+                project_name=self.app.main_window.project_var.get(),
+                radiator_discount=parse_discount(
+                    self._radiator_discount_var.get()
+                ),
+                bracket_discount=parse_discount(
+                    self._bracket_discount_var.get()
+                ),
+            )
 
             if platform.system() == "Windows":
-                os.startfile(str(file_path))
+                os.startfile(file_path)
             elif platform.system() == "Darwin":
-                subprocess.call(["open", str(file_path)])
+                subprocess.call(["open", file_path])
             else:
-                subprocess.call(["xdg-open", str(file_path)])
+                subprocess.call(["xdg-open", file_path])
 
         except Exception as e:
             messagebox.showerror("Ошибка", f"Не удалось сохранить:\n{str(e)}")
             logger.error(f"Ошибка экспорта: {e}")
             import traceback
             logger.error(traceback.format_exc())
-
+            
     def _back_to_correspondence(self) -> None:
+        """Возвращает к таблице соответствия."""
         self._close()
 
-        if hasattr(self.app, '_last_correspondence_data') and self.app._last_correspondence_data is not None:
-            if not self.app._last_correspondence_data.empty:
-                from nextt.ui.dialogs.correspondence import CorrespondenceDialog
-                dialog = CorrespondenceDialog(self.app)
-                self.app._last_correspondence_dialog = dialog
-                dialog.show(self.app._last_correspondence_data)
-                return
+        # Пробуем сначала _last_correspondence_data, затем _all_correspondence_data
+        data_to_show = None
+        if (hasattr(self.app, '_last_correspondence_data')
+                and self.app._last_correspondence_data is not None
+                and not self.app._last_correspondence_data.empty):
+            data_to_show = self.app._last_correspondence_data
 
-        messagebox.showinfo("Информация", "Нет данных для редактирования.\nСначала загрузите спецификацию.")
+        if data_to_show is None and (hasattr(self.app, '_all_correspondence_data')
+                and self.app._all_correspondence_data is not None
+                and not self.app._all_correspondence_data.empty):
+            data_to_show = self.app._all_correspondence_data
+
+        if data_to_show is not None:
+            from nextt.ui.dialogs.correspondence import CorrespondenceDialog
+            dialog = CorrespondenceDialog(self.app)
+            self.app._last_correspondence_dialog = dialog
+            dialog.show(data_to_show)
+            return
+
+        messagebox.showinfo(
+            "Информация",
+            "Нет данных для редактирования.\n"
+            "Сначала загрузите спецификацию."
+        )
 
     def _close(self) -> None:
         # Сохраняем состояние чекбокса «Подсказка» в settings.json

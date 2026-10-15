@@ -9,6 +9,11 @@ from typing import Dict, List, Tuple, Optional
 import pandas as pd
 
 from nextt.logger import get_logger
+from nextt.core.power_recalculator import PowerRecalculator
+from nextt.utils.format import (
+    format_power as _fmt_power_common,
+    format_weight as _fmt_weight_common,
+)
 
 logger = get_logger(__name__)
 
@@ -31,6 +36,7 @@ class SpecGenerator:
         bracket_type: str = "Настенные кронштейны",
         radiator_discount: float = 0.0,
         bracket_discount: float = 0.0,
+        delta_t: float = 70.0,
     ) -> Optional[pd.DataFrame]:
         """
         Готовит данные для спецификации на основе заполненной матрицы.
@@ -40,6 +46,11 @@ class SpecGenerator:
             bracket_type: тип кронштейнов
             radiator_discount: скидка на радиаторы (%)
             bracket_discount: скидка на кронштейны (%)
+            delta_t: температурный напор, °С.
+                     При 70.0 (эталон 95/85/20) мощности не пересчитываются.
+                     При другом значении мощность каждого радиатора
+                     умножается на коэффициент (70/Δt)^n по ГОСТ 31311-2022
+                     и округляется до целого числа ватт.
 
         Returns:
             DataFrame с колонками:
@@ -87,16 +98,29 @@ class SpecGenerator:
                 total = round(disc_price * qty, 2)
 
                 name = str(product['Наименование'])
-                power = product.get('Мощность, Вт', 0)
+                power_nom = product.get('Мощность, Вт', 0)
 
-                # Извлекаем параметры для сортировки
+                # Извлекаем параметры для сортировки и для пересчёта
                 height, length, rad_type, conn = self._extract_params(name)
+
+                # === Пересчёт мощности при нестандартном графике ===
+                if PowerRecalculator.is_reference(delta_t):
+                    # Эталонный график — паспортное значение
+                    power = float(power_nom) if power_nom else 0.0
+                else:
+                    # Нестандартный график — пересчёт с округлением до целого
+                    power_nom_f = float(power_nom) if power_nom else 0.0
+                    power_recalc = PowerRecalculator.recalc_power(
+                        power_nom_f, rad_type, height, delta_t
+                    )
+                    power = int(round(power_recalc))
+                # ====================================================
 
                 radiator_rows.append({
                     "№": 0,  # будет пересчитан после сортировки
                     "Артикул": str(product['Артикул']).strip(),
                     "Наименование": name,
-                    "Мощность, Вт": float(power) if power else 0.0,
+                    "Мощность, Вт": power,
                     "Тип монтажа": mount_value_for_radiators,
                     "Цена, руб (с НДС)": price,
                     "Скидка, %": radiator_discount,
@@ -155,7 +179,7 @@ class SpecGenerator:
                     "Артикул": b["Артикул"],
                     "Наименование": b["Наименование"],
                     "Мощность, Вт": 0.0,
-                    "Тип монтажа": "",  # у кронштейнов — пусто
+                    "Тип монтажа": "",
                     "Цена, руб (с НДС)": b["Цена, руб (с НДС)"],
                     "Скидка, %": bracket_discount,
                     "Цена со скидкой, руб (с НДС)": round(
@@ -170,7 +194,6 @@ class SpecGenerator:
 
         combined = radiator_rows + bracket_rows
 
-        # Убираем служебные колонки
         df = pd.DataFrame(combined)
         columns = [
             "№", "Артикул", "Наименование", "Мощность, Вт", "Тип монтажа",
@@ -179,8 +202,9 @@ class SpecGenerator:
             "Сумма, руб (с НДС)"
         ]
         return df[[c for c in columns if c in df.columns]]
+
     # ==================================================================
-    # ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
+    # ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ 
     # ==================================================================
 
     def parse_quantity(self, value) -> int:
@@ -203,10 +227,6 @@ class SpecGenerator:
             return int(val) if abs(val - round(val)) < 0.001 else 0
         except ValueError:
             return 0
-
-    # ==================================================================
-    # ИСПРАВЛЕННЫЙ МЕТОД _extract_params
-    # ==================================================================
 
     def _extract_params(self, name: str) -> Tuple[int, int, str, str]:
         """Извлекает высоту, длину, тип и подключение из названия."""
@@ -233,20 +253,16 @@ class SpecGenerator:
             except (ValueError, IndexError):
                 pass
 
-        # ========== ИСПРАВЛЕНИЕ: правильно определяем подключение ==========
+        # Правильно определяем подключение
         name_lower = name.lower()
-        
-        # Проверяем гигиенические радиаторы (HV и H)
+
         if 'ventil hygiene (hv)' in name_lower:
-            # HV-нижнее правое или HV-нижнее левое
-            # Проверяем признаки левого подключения
             if ' la' in name_lower or ' l ' in name_lower or name_lower.endswith(' la'):
                 conn = "HV-левое"
             else:
                 conn = "HV-правое"
         elif 'hygiene (h)' in name_lower:
             conn = "H-боковое"
-        # Старые радиаторы
         elif 'VK' in name:
             if ' la' in name_lower or ' l ' in name_lower or name_lower.endswith(' la'):
                 conn = "VK-левое"
@@ -255,14 +271,9 @@ class SpecGenerator:
         elif 'K-' in name or 'K-Profil' in name:
             conn = "K-боковое"
         else:
-            # По умолчанию
             conn = "VK-правое"
 
         return height, length, rad_type, conn
-
-    # ==================================================================
-    # МЕТОД _calculate_brackets (с параметром connection)
-    # ==================================================================
 
     def _calculate_brackets(
         self, rad_type: str, length: int, height: int,
@@ -273,7 +284,16 @@ class SpecGenerator:
         return BracketsCalculator.calculate(rad_type, length, height, bracket_type, connection, qty)
 
     def calculate_totals(self, spec_data: pd.DataFrame) -> Tuple[float, float, float]:
-        """Рассчитывает общую мощность, вес и объём."""
+        """
+        Рассчитывает общую мощность, вес и объём.
+
+        Мощность берётся из столбца «Мощность, Вт» в spec_data —
+        это значит, что при нестандартном температурном графике
+        в итог попадёт уже пересчитанное значение.
+
+        Вес и объём берутся из базы по артикулу (они не зависят
+        от температурного графика).
+        """
         total_power = 0.0
         total_weight = 0.0
         total_volume = 0.0
@@ -281,33 +301,38 @@ class SpecGenerator:
         for _, row in spec_data.iterrows():
             if "Кронштейн" in str(row["Наименование"]):
                 continue
+
             art = str(row["Артикул"]).strip()
             qty = int(row["Кол-во"])
-            
-            # Сначала ищем в обычных радиаторах (LaggarTT)
+
+            # Мощность — из spec_data (уже пересчитана под текущий Δt)
+            try:
+                power = float(row.get("Мощность, Вт", 0) or 0)
+                total_power += power * qty
+            except (ValueError, TypeError):
+                pass
+
+            # Вес и объём — из базы (не зависят от Δt)
             found = self.data_provider.find_by_article(art)
-            
-            # Если не найден — ищем в Метеор
             if found is None:
                 found = self.data_provider.find_meteor_by_article(art)
-            
+
             if found is not None:
-                total_power += float(found.get('Мощность, Вт', 0)) * qty
                 total_weight += float(found.get('Вес, кг', 0)) * qty
                 total_volume += float(found.get('Объем, м3', 0)) * qty
 
         return total_power, round(total_weight, 1), round(total_volume, 3)
 
     def format_power(self, power_w: float) -> str:
-        """Форматирует мощность."""
-        if power_w >= 1_000_000:
-            return f"{round(power_w / 1_000_000, 3)} МВт"
-        elif power_w >= 1_000:
-            return f"{round(power_w / 1_000, 3)} кВт"
-        return f"{round(power_w, 2)} Вт"
+        """
+        Форматирует мощность (совместимость со старым API — точка).
+        Логика вынесена в nextt.utils.format.format_power.
+        """
+        return _fmt_power_common(power_w, sep='.')
 
     def format_weight(self, weight_kg: float) -> str:
-        """Форматирует вес."""
-        if weight_kg >= 1000:
-            return f"{weight_kg / 1000:.3f} т"
-        return f"{weight_kg:.3f} кг"
+        """
+        Форматирует вес (совместимость со старым API — точка).
+        Логика вынесена в nextt.utils.format.format_weight.
+        """
+        return _fmt_weight_common(weight_kg, sep='.')

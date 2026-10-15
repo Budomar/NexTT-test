@@ -12,8 +12,7 @@ from nextt.logger import get_logger
 
 logger = get_logger(__name__)
 
-EXPERIMENTAL_ENABLED = True
-
+EXPERIMENTAL_ENABLED = False
 
 def register_paste_button(main_window) -> None:
     if not EXPERIMENTAL_ENABLED:
@@ -524,6 +523,32 @@ def _is_article(text: str) -> bool:
     
     return False
 
+def _parse_price_from_db(value) -> float:
+    """
+    Парсит цену из базы данных.
+    Поддерживает русский формат: '64 286,71', '64\xa0286,71'
+    и английский: '64286.71'.
+    При ошибке возвращает 0.0.
+    """
+    if value is None:
+        return 0.0
+    if pd.isna(value):
+        return 0.0
+
+    s = str(value).strip()
+    if not s:
+        return 0.0
+
+    # Убираем неразрывные и обычные пробелы (разделители тысяч)
+    s = s.replace('\xa0', '').replace(' ', '')
+
+    # Заменяем запятую на точку (русский десятичный разделитель)
+    s = s.replace(',', '.')
+
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return 0.0
 
 def _search_article_in_database(article: str, df: pd.DataFrame) -> Optional[Dict]:
     """
@@ -546,7 +571,7 @@ def _search_article_in_database(article: str, df: pd.DataFrame) -> Optional[Dict
         return {
             'article': str(row['Артикул']),
             'name': str(row['Наименование']),
-            'price': float(row['Цена']) if 'Цена' in row and pd.notna(row['Цена']) else 0,
+            'price': _parse_price_from_db(row['Цена']) if 'Цена' in row else 0.0,
             'category': str(row['Иерархия']) if 'Иерархия' in row and pd.notna(row['Иерархия']) else '',
         }
     
@@ -559,7 +584,7 @@ def _search_article_in_database(article: str, df: pd.DataFrame) -> Optional[Dict
             return {
                 'article': str(row['Артикул']),
                 'name': str(row['Наименование']),
-                'price': float(row['Цена']) if 'Цена' in row and pd.notna(row['Цена']) else 0,
+                'price': _parse_price_from_db(row['Цена']) if 'Цена' in row else 0.0,
                 'category': str(row['Иерархия']) if 'Иерархия' in row and pd.notna(row['Иерархия']) else '',
             }
     
@@ -570,7 +595,7 @@ def _search_article_in_database(article: str, df: pd.DataFrame) -> Optional[Dict
             return {
                 'article': str(row['Артикул']),
                 'name': str(row['Наименование']),
-                'price': float(row['Цена']) if 'Цена' in row and pd.notna(row['Цена']) else 0,
+                'price': _parse_price_from_db(row['Цена']) if 'Цена' in row else 0.0,
                 'category': str(row['Иерархия']) if 'Иерархия' in row and pd.notna(row['Иерархия']) else '',
             }
     

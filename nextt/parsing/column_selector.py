@@ -92,12 +92,10 @@ class ColumnSelector:
         """Создаёт окно диалога (без вкладок)."""
         self._dialog = tk.Toplevel(self.parent)
         
-        from nextt.utils.window_manager import setup_dialog_window
+        from nextt.utils.window_manager import setup_dialog_window, get_safe_geometry
         setup_dialog_window(self._dialog, f"Мастер импорта спецификации — {os.path.basename(self.file_path)}")
 
-        screen_w = self._dialog.winfo_screenwidth()
-        screen_h = self._dialog.winfo_screenheight()
-        self._dialog.geometry(f"{screen_w}x{screen_h - 70}+0+0")
+        self._dialog.geometry(get_safe_geometry(self._dialog))
         self._dialog.configure(bg='#f5f5f5')
 
         if self.font_manager:

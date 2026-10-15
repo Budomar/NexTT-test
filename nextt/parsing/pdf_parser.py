@@ -314,6 +314,108 @@ class PDFParser:
 
         return df
 
+    def _debug_cell_extraction(self, page, page_num: int) -> None:
+        """
+        ВРЕМЕННАЯ ОТЛАДКА: показывает, как pdfplumber видит слова,
+        ячейки и результат extract_tables() для указанной страницы.
+        Запускается только для страницы с 'Количество' в заголовке.
+        """
+        try:
+            # --- Проверяем, есть ли на странице заголовок 'Количество' ---
+            text = page.extract_text() or ""
+            if 'Количество' not in text:
+                return
+
+            self._log(f"🔬 [DEBUG] ОТЛАДКА ИЗВЛЕЧЕНИЯ ЯЧЕЕК (стр. {page_num})")
+            self._log(f"🔬 [DEBUG] {'=' * 60}")
+
+            # ============================================================
+            # 1. СЫРОЙ РЕЗУЛЬТАТ extract_tables() — что реально отдаёт pdfplumber
+            # ============================================================
+            self._log(f"🔬 [DEBUG] --- 1. extract_tables() (сырые ячейки) ---")
+            try:
+                raw_tables = page.extract_tables()
+                if not raw_tables:
+                    self._log(f"🔬 [DEBUG] extract_tables() вернул пусто")
+                else:
+                    self._log(f"🔬 [DEBUG] Найдено таблиц: {len(raw_tables)}")
+                    # Показываем первую таблицу, первые 8 строк
+                    first = raw_tables[0]
+                    self._log(f"🔬 [DEBUG] Первая таблица: {len(first)} строк")
+                    for ri, row in enumerate(first[:8]):
+                        cells_str = [f"[{ci}]='{str(c)}'" for ci, c in enumerate(row)]
+                        self._log(f"🔬 [DEBUG]   Строка {ri}: {' | '.join(cells_str)}")
+            except Exception as e:
+                self._log(f"🔬 [DEBUG] Ошибка extract_tables(): {e}", "ERROR")
+
+            # ============================================================
+            # 2. extract_words() — слова с координатами
+            # ============================================================
+            self._log(f"🔬 [DEBUG] --- 2. extract_words() (слова с координатами) ---")
+            try:
+                words = page.extract_words(keep_blank_chars=False, use_text_flow=False)
+                self._log(f"🔬 [DEBUG] Всего слов: {len(words)}")
+                # Ищем слова, похожие на '2', '/', '2,52', '22,52' — это ячейка количества
+                self._log(f"🔬 [DEBUG] Слова, содержащие '/' или ',' или только цифры:")
+                shown = 0
+                for w in words:
+                    wtext = w.get('text', '')
+                    if '/' in wtext or ',' in wtext or wtext.isdigit():
+                        self._log(
+                            f"🔬 [DEBUG]   x0={w['x0']:.1f} top={w['top']:.1f} "
+                            f"x1={w['x1']:.1f} bottom={w['bottom']:.1f} "
+                            f"text='{wtext}'"
+                        )
+                        shown += 1
+                        if shown >= 30:
+                            break
+                if shown == 0:
+                    self._log(f"🔬 [DEBUG] Не найдено слов с '/' или ','")
+            except Exception as e:
+                self._log(f"🔬 [DEBUG] Ошибка extract_words(): {e}", "ERROR")
+
+            # ============================================================
+            # 3. find_tables() — координаты ячеек (bbox)
+            # ============================================================
+            self._log(f"🔬 [DEBUG] --- 3. find_tables() (bbox ячеек) ---")
+            try:
+                tables_obj = page.find_tables()
+                self._log(f"🔬 [DEBUG] Найдено таблиц через find_tables(): {len(tables_obj)}")
+                if tables_obj:
+                    t = tables_obj[0]
+                    self._log(f"🔬 [DEBUG] bbox таблицы: {t.bbox}")
+                    cells = getattr(t, 'cells', None)
+                    if cells:
+                        self._log(f"🔬 [DEBUG] Ячеек в таблице: {len(cells)}")
+                        self._log(f"🔬 [DEBUG] Первые 25 ячеек (x0, top, x1, bottom):")
+                        for ci, c in enumerate(cells[:25]):
+                            self._log(f"🔬 [DEBUG]   [{ci}] {c}")
+                    else:
+                        self._log(f"🔬 [DEBUG] cells пуст (нет линий сетки)")
+            except Exception as e:
+                self._log(f"🔬 [DEBUG] Ошибка find_tables(): {e}", "ERROR")
+
+            # ============================================================
+            # 4. Ищем конкретную ячейку с количеством '2/2,52' или '22,52'
+            # ============================================================
+            self._log(f"🔬 [DEBUG] --- 4. Поиск ячейки с '2/2,52' или '22,52' ---")
+            try:
+                words = page.extract_words(keep_blank_chars=False, use_text_flow=False)
+                for w in words:
+                    wtext = w.get('text', '')
+                    if wtext in ('2/2,52', '22,52', '2', '/', '2,52'):
+                        self._log(
+                            f"🔬 [DEBUG] Найдено слово: x0={w['x0']:.1f} top={w['top']:.1f} "
+                            f"x1={w['x1']:.1f} bottom={w['bottom']:.1f} text='{wtext}'"
+                        )
+            except Exception as e:
+                self._log(f"🔬 [DEBUG] Ошибка поиска слова: {e}", "ERROR")
+
+            self._log(f"🔬 [DEBUG] {'=' * 60}")
+
+        except Exception as e:
+            self._log(f"🔬 [DEBUG] Критическая ошибка отладки: {e}", "ERROR")
+
     # ==================================================================
     # ОСНОВНОЙ МЕТОД ПАРСИНГА
     # ==================================================================
@@ -452,10 +554,11 @@ class PDFParser:
                         self.progress_callback(idx + 1, len(pages_to_process))
 
                     page = pdf.pages[page_num - 1]
-                    
-                    # ========== НИКАКОЙ ФИЛЬТРАЦИИ ==========
-                    # Обрабатываем ВСЕ страницы, которые выбрал пользователь
-                    # ==========
+
+                    # ========== ВРЕМЕННАЯ ОТЛАДКА ==========
+                    self._debug_cell_extraction(page, page_num)
+                    # ========== КОНЕЦ ОТЛАДКИ ==========
+
 
                     self._log(f"\n📖 ОБРАБОТКА СТРАНИЦЫ {page_num}/{total_pages_in_pdf}")
                     self._log(f"📖 Прогресс: {idx + 1}/{len(pages_to_process)}")

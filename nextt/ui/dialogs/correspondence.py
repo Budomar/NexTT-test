@@ -81,12 +81,10 @@ class CorrespondenceDialog:
         """Создаёт окно диалога."""
         self._dialog = tk.Toplevel(self.app.root)
         
-        from nextt.utils.window_manager import setup_dialog_window
+        from nextt.utils.window_manager import setup_dialog_window, get_safe_geometry
         setup_dialog_window(self._dialog, "Мастер подбора аналогов LaggarTT")
 
-        screen_w = self._dialog.winfo_screenwidth()
-        screen_h = self._dialog.winfo_screenheight()
-        self._dialog.geometry(f"{screen_w}x{screen_h - 70}+0+0")
+        self._dialog.geometry(get_safe_geometry(self._dialog))
         self._dialog.configure(bg='#f5f5f5')
 
         default_font = self.font_manager.get_default_font()
@@ -929,18 +927,12 @@ class CorrespondenceDialog:
         self._close()
 
         if transferred > 0:
-            spec_data = self.app.spec_generator.prepare_spec_data(
-                entry_values=self.app.entry_values,
-                bracket_type=self.app.main_window.bracket_var.get(),
-                radiator_discount=float(self.app.main_window.radiator_discount_var.get() or 0),
-                bracket_discount=float(self.app.main_window.bracket_discount_var.get() or 0),
-            )
-
-            if spec_data is not None and not spec_data.empty:
-                from nextt.ui.dialogs.preview import PreviewDialog
-                preview = PreviewDialog(self.app)
-                preview.show(spec_data)
-            else:
+            # Открываем предпросмотр через главное окно, чтобы передать source="foreign"
+            # и получить кнопки «Назад к подбору аналогов» / «Назад к выбору столбцов».
+            try:
+                self.app.main_window._on_preview(source="foreign")
+            except Exception as e:
+                logger.error(f"Ошибка открытия предпросмотра: {e}")
                 messagebox.showinfo(
                     "Перенос завершён",
                     f"Перенесено {transferred} позиций в матрицу.\n"

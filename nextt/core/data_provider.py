@@ -277,6 +277,9 @@ class DataProvider:
         - height=3 → 300, height=03 → 300
         - length=12 → 1200, length=04 → 400
         - type=12 → 21 (в LaggarTT нет типа 12)
+
+        FALLBACK: если по указанному подключению аналог не найден —
+        пробует парное подключение (H↔K, HV↔VK).
         """
         try:
             type_int = int(rad_type)
@@ -301,13 +304,11 @@ class DataProvider:
         # ПРЕОБРАЗОВАНИЕ ВЫСОТЫ (код → миллиметры)
         # ================================================================
         actual_height = height
-        
+
         # Если высота меньше 100 — это код, преобразуем в миллиметры
         if height < 100:
-            # Код 3 → 300, код 03 → 3 → 300
             actual_height = height * 100
-            
-            # Корректировка для особых случаев
+
             if actual_height == 200:
                 actual_height = 300
             elif actual_height == 700:
@@ -316,10 +317,9 @@ class DataProvider:
                 actual_height = 900
             elif actual_height == 1000:
                 actual_height = 900
-        
+
         # Проверяем валидность высоты
         if actual_height not in self.VALID_HEIGHTS:
-            # Ищем ближайшую допустимую высоту
             closest = min(self.VALID_HEIGHTS, key=lambda h: abs(h - actual_height))
             if abs(closest - actual_height) <= 100:
                 actual_height = closest
@@ -330,12 +330,11 @@ class DataProvider:
         # ПРЕОБРАЗОВАНИЕ ДЛИНЫ (код → миллиметры)
         # ================================================================
         actual_length = length
-        
+
         # Если длина меньше 100 — это код, преобразуем в миллиметры
         if length < 100:
             actual_length = length * 100
-            
-            # Корректировка для особых случаев
+
             if actual_length == 300:
                 actual_length = 300
             elif actual_length == 700:
@@ -344,11 +343,9 @@ class DataProvider:
                 actual_length = 800
             elif actual_length == 900:
                 actual_length = 900
-            # 1000 и выше уже нормально
-        
+
         # Проверяем валидность длины
         if actual_length not in self.VALID_LENGTHS:
-            # Округляем до ближайшего шага 100
             rounded = round(actual_length / 100) * 100
             if 400 <= rounded <= 3000:
                 actual_length = rounded
@@ -356,24 +353,63 @@ class DataProvider:
                 return None, None
 
         # ================================================================
-        # ПОИСК В БАЗЕ
+        # ВНУТРЕННЯЯ ФУНКЦИЯ: поиск по конкретному подключению
         # ================================================================
-        pattern = f"/{actual_height}/{actual_length}"
+        def _search_by_connection(conn: str) -> Optional[pd.Series]:
+            """Ищет радиатор по подключению, типу, высоте, длине."""
+            pattern = f"/{actual_height}/{actual_length}"
+            try:
+                mask = (
+                    (self._radiators_df['Connection'] == conn) &
+                    (self._radiators_df['RadiatorType'] == type_int) &
+                    (self._radiators_df['Наименование'].str.contains(
+                        pattern, na=False, regex=False
+                    ))
+                )
+                matches = self._radiators_df[mask]
+            except Exception:
+                return None
 
-        try:
-            mask = (
-                (self._radiators_df['Connection'] == connection) &
-                (self._radiators_df['RadiatorType'] == type_int) &
-                (self._radiators_df['Наименование'].str.contains(pattern, na=False, regex=False))
-            )
-            matches = self._radiators_df[mask]
-        except Exception:
-            return None, None
+            if not matches.empty:
+                return matches.iloc[0]
+            return None
 
-        if not matches.empty:
-            row = matches.iloc[0]
+        # ================================================================
+        # ШАГ 1: Поиск по указанному подключению
+        # ================================================================
+        row = _search_by_connection(connection)
+        if row is not None:
             return str(row['Артикул']), str(row['Наименование'])
 
+        # ================================================================
+        # ШАГ 2: FALLBACK — поиск по парному подключению
+        # ================================================================
+        fallback_map = {
+            "H-боковое":  "K-боковое",
+            "K-боковое":  "H-боковое",
+            "HV-правое":  "VK-правое",
+            "VK-правое":  "HV-правое",
+            "HV-левое":   "VK-левое",
+            "VK-левое":   "HV-левое",
+        }
+
+        fallback_connection = fallback_map.get(connection)
+        if fallback_connection:
+            logger.debug(
+                f"   [FALLBACK] Не найдено '{connection} {type_int}/"
+                f"{actual_height}/{actual_length}', "
+                f"пробуем '{fallback_connection}'"
+            )
+            row = _search_by_connection(fallback_connection)
+            if row is not None:
+                logger.debug(
+                    f"   [FALLBACK] ✅ Найдено: {row['Наименование']}"
+                )
+                return str(row['Артикул']), str(row['Наименование'])
+
+        # ================================================================
+        # Ничего не нашли
+        # ================================================================
         return None, None
 
     def convert_meteor_to_laggar(self, article: str) -> Tuple[Optional[str], Optional[str]]:

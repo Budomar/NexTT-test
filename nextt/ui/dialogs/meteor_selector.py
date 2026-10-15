@@ -98,18 +98,11 @@ class MeteorSelector:
         self._dialog = tk.Toplevel(parent)
         
         # Настройка окна (кнопки свернуть/развернуть/закрыть)
-        from nextt.utils.window_manager import setup_dialog_window
+        from nextt.utils.window_manager import setup_dialog_window, get_safe_geometry
         setup_dialog_window(self._dialog, f"Подбор аналога LaggarTT для: {self._original_name[:60]}...")
 
         # Полноэкранный режим
-        from nextt.utils.window_manager import get_safe_geometry
-        geom = get_safe_geometry(self._dialog)
-        parts = geom.replace('x', '+').split('+')
-        w = int(parts[0])
-        h = int(parts[1]) - 35
-        x = int(parts[2])
-        y = int(parts[3])
-        self._dialog.geometry(f"{w}x{h}+{x}+{y}")
+        self._dialog.geometry(get_safe_geometry(self._dialog))
         self._dialog.configure(bg='#f5f5f5')
 
         # Получаем масштабированные шрифты

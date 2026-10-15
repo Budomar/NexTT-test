@@ -409,7 +409,11 @@ class SpecNormalizer:
     def _determine_side(self, text: str, original: str = "") -> Optional[str]:
         """
         Возвращает 'left', 'right', или None.
-        Распознаёт ВСЕ возможные варианты написания стороны.
+        Распознаёт ВСЕ возможные варианты написания стороны,
+        включая все падежи, сокращения, латиницу и суффиксы.
+
+        Универсальный подход: используем корень слова + \\w*,
+        чтобы поймать любые окончания (левым, левого, левая, лев, слева и т.д.).
         """
         # Объединяем оба текста для поиска
         t = (text + " " + original).lower()
@@ -426,12 +430,12 @@ class SpecNormalizer:
             r'(?<![a-z])l(?![a-z0-9])',
             # Сокращения с точкой
             r'\bлев\.',
-            # Полные слова (все падежи и роды)
-            r'\bлев(?:ое|ый|ая|ые|а|о)?\b',
+            # Полные слова — корень + любые окончания (все падежи)
+            r'\bлев\w*\b',
             # Наречие
             r'\bслева\b',
             # Сложные слова
-            r'\bлевостор(?:онн(?:ее|ий|яя|ие|яя)|\.)?\b',
+            r'\bлевосторон\w*\b',
             # Английские
             r'\bleft\b',
             # Словосочетания
@@ -455,12 +459,12 @@ class SpecNormalizer:
             r'(?<![a-z])r(?![a-z0-9])',
             # Сокращения с точкой
             r'\bправ\.',
-            # Полные слова (все падежи и роды)
-            r'\bправ(?:ое|ый|ая|ые|а|о)?\b',
+            # Полные слова — корень + любые окончания (все падежи)
+            r'\bправ\w*\b',
             # Наречие
             r'\bсправа\b',
             # Сложные слова
-            r'\bправостор(?:онн(?:ее|ий|яя|ие|яя)|\.)?\b',
+            r'\bправосторон\w*\b',
             # Английские
             r'\bright\b',
             # Словосочетания
@@ -472,11 +476,11 @@ class SpecNormalizer:
             if re.search(pat, t):
                 return 'right'
 
-        #   Проверка суффиксов слов (CVL → CV + L = левое, CVR → CV + R = правое)
+        # Проверка суффиксов слов (CVL → CV + L = левое, CVR → CV + R = правое)
         # Ищем слова из 2-4 букв, заканчивающиеся на l или r
         left_suffix = re.findall(r'\b[a-z]{1,3}l\b', t)
         right_suffix = re.findall(r'\b[a-z]{1,3}r\b', t)
-        
+
         if left_suffix and not right_suffix:
             return 'left'
         if right_suffix and not left_suffix:
@@ -547,19 +551,34 @@ class SpecNormalizer:
             return 'K'
 
     def _adjust_side_v2(self, connection: str, text: str, original: str) -> str:
-        """Корректирует сторону подключения для VK-типов."""
-        if connection == 'K-боковое':
+        """
+        Корректирует сторону подключения для VK-типов.
+
+        ВАЖНО: этот метод НЕ должен перебивать уже определённое подключение.
+        Если стратегия уже вернула VK-левое или VK-правое по явному признаку
+        (суффикс в артикуле, слово в тексте), метод сохраняет его.
+
+        Метод вызывается только когда нужно уточнить сторону для VK-типов
+        по тексту. Если в тексте нет явных признаков — возвращает
+        подключение без изменений (не перебивает на "по умолчанию").
+        """
+        # Гигиенические и боковое K — не трогаем
+        if connection in ('K-боковое', 'H-боковое', 'HV-правое', 'HV-левое'):
             return connection
 
+        # Если подключение уже VK-левое или VK-правое — проверяем,
+        # есть ли в тексте противоречащий явный признак.
+        # Если нет — оставляем как есть.
         side = self._determine_side(text, original)
+
         if side == 'left':
             return 'VK-левое'
         elif side == 'right':
             return 'VK-правое'
 
-        # Если не удалось определить — для VK всегда правое по умолчанию
-        return 'VK-правое'
-
+        # Если явных признаков стороны нет — НЕ перебиваем на "по умолчанию".
+        # Возвращаем то, что уже было определено стратегией.
+        return connection
     # ========================================================================
     # ПАРСЕРЫ
     # ========================================================================
@@ -587,65 +606,51 @@ class SpecNormalizer:
             # ================================================================
             # ШАГ 1: ПРОВЕРКА НА ГИГИЕНИЧЕСКИЙ РАДИАТОР
             # ================================================================
-            # Русские варианты
             russian_patterns = [
-                r'гигиеническ',   # гигиенический, гигиеническая, гигиеническое
-                r'гигиеничн',     # гигиеничн...
-                r'гигиенич',      # гигиенич...
-                r'гигиен',        # гигиен...
+                r'гигиеническ', r'гигиеничн', r'гигиенич', r'гигиен',
             ]
-            
-            # Английские варианты
             english_patterns = [
-                r'hygienic',      # hygienic
-                r'hygiene',       # hygiene
-                r'hygien',        # hygien...
+                r'hygienic', r'hygiene', r'hygien',
             ]
             
-            # Проверяем наличие любого из ключевых слов
             is_hygiene = False
-            for pattern in russian_patterns:
+            for pattern in russian_patterns + english_patterns:
                 if re.search(pattern, combined):
                     is_hygiene = True
                     break
-            if not is_hygiene:
-                for pattern in english_patterns:
-                    if re.search(pattern, combined):
-                        is_hygiene = True
-                        break
             
-            # Если нет признаков гигиены — пропускаем
             if not is_hygiene:
                 return None
             
-            logger.info(f"  [HYGIENE] Обнаружен гигиенический радиатор: '{original[:80]}'")
+            logger.info(f"  [HYGIENE] Обнаружен гигиенический радиатор: '{original}'")
             
             # ================================================================
-            # ШАГ 2: ИЗВЛЕЧЕНИЕ ПАРАМЕТРОВ (ПРИОРИТЕТ 1: ЯВНЫЕ УКАЗАНИЯ)
+            # ШАГ 2: ЯВНЫЕ УКАЗАНИЯ (приоритет 1)
             # ================================================================
             rad_type = None
             height = None
             length = None
             
-            # 2.1: Явное указание типа: "тип 20KV", "тип 20", "type 20"
+            # 2.1: Тип
             type_patterns = [
-                r'тип\s*(\d{2})[a-z]*',   # тип 20KV, тип 20
-                r'type\s*(\d{2})',         # type 20
+                r'тип\s*(\d{2})[a-z]*',
+                r'type\s*(\d{2})',
             ]
             for pattern in type_patterns:
                 match = re.search(pattern, combined)
                 if match:
-                    rad_type = match.group(1)
-                    if rad_type in ['10', '20', '30']:
+                    t = match.group(1)
+                    if t in ['10', '20', '30']:
+                        rad_type = t
                         logger.info(f"  [HYGIENE] Тип из явного указания: {rad_type}")
                         break
             
-            # 2.2: Явное указание высоты: "высотой H = 500 мм", "H=500 мм", "H=500"
+            # 2.2: Высота
             height_patterns = [
-                r'высот[аой]\s*(?:h\s*=\s*)?(\d{3,4})\s*мм',  # высотой H = 500 мм
-                r'h\s*=\s*(\d{3,4})\s*мм',                     # H=500 мм
-                r'h\s*=\s*(\d{3,4})',                          # H=500
-                r'высот[аой]\s*(\d{3,4})\s*мм',                # высотой 500 мм
+                r'высот[аой]\s*(?:h\s*=\s*)?(\d{3,4})\s*мм',
+                r'h\s*=\s*(\d{3,4})\s*мм',
+                r'h\s*=\s*(\d{3,4})',
+                r'высот[аой]\s*(\d{3,4})\s*мм',
             ]
             for pattern in height_patterns:
                 match = re.search(pattern, combined)
@@ -654,151 +659,149 @@ class SpecNormalizer:
                     logger.info(f"  [HYGIENE] Высота из явного указания: {height}")
                     break
             
-            # 2.3: Явное указание длины: "длиной 0,8 м", "L=0,8 м", "L=800"
+            # 2.3: Длина
             length_patterns = [
-                r'длин[аой]\s*(?:l\s*=\s*)?([\d,]+)\s*м',     # длиной 0,8 м
-                r'l\s*=\s*([\d,]+)\s*м',                       # L=0,8 м
-                r'l\s*=\s*(\d{3,4})',                          # L=800
-                r'длин[аой]\s*(\d{3,4})',                      # длина 800
+                r'длин[аой]\s*(?:l\s*=\s*)?([\d,]+)\s*м',
+                r'l\s*=\s*([\d,]+)\s*м',
+                r'l\s*=\s*(\d{3,4})',
+                r'длин[аой]\s*(\d{3,4})',
             ]
             for pattern in length_patterns:
                 match = re.search(pattern, combined)
                 if match:
                     length_str = match.group(1)
-                    # Если есть запятая (0,8) — преобразуем в миллиметры
                     if ',' in length_str:
-                        length_float = float(length_str.replace(',', '.'))
-                        length = int(length_float * 1000)
+                        length = int(float(length_str.replace(',', '.')) * 1000)
                     else:
                         length = int(length_str)
                     logger.info(f"  [HYGIENE] Длина из явного указания: {length}")
                     break
             
             # ================================================================
-            # ШАГ 3: ЕСЛИ НЕ НАШЛИ — ПЫТАЕМСЯ ИЗВЛЕЧЬ ИЗ КРАТКОГО ФОРМАТА
+            # ШАГ 3: КРАТКИЙ ФОРМАТ — H10-500-600 / HV20-500-800 / 20KV-500-800
+            # ИСПРАВЛЕНО: исключаем уже использованные числа
             # ================================================================
             if rad_type is None or height is None or length is None:
-                # Формат: KV20-500-800, KV 20-500-800, 20KV-500-800
+                # Ищем тройку чисел через дефис/слэш/пробел
+                # Пример: h10-500-600, hv20-500-800, 20kv-500-800, h10 500 600
                 short_patterns = [
-                    r'[a-z]{2,3}(\d{2})[-\s](\d{3,4})[-\s](\d{3,4})',  # KV20-500-800
-                    r'(\d{2})[a-z]{2,3}[-\s](\d{3,4})[-\s](\d{3,4})',  # 20KV-500-800
-                    r'[a-z]{2,3}\s*(\d{2})\s*[-\s]\s*(\d{3,4})\s*[-\s]\s*(\d{3,4})',  # KV 20-500-800
+                    # H10-500-600, HV20-500-800
+                    r'[a-zа-я]{1,3}[-\s]?(\d{2})[-\s](\d{3,4})[-\s](\d{3,4})(?!\d)',
+                    # 20KV-500-800, 20 H-500-800
+                    r'(\d{2})[a-zа-я]{1,3}[-\s]?(\d{3,4})[-\s](\d{3,4})(?!\d)',
+                    # Общий случай: три числа через разделитель
+                    r'(?<!\d)(\d{2})[-\s](\d{3,4})[-\s](\d{3,4})(?!\d)',
                 ]
+                
                 for pattern in short_patterns:
                     match = re.search(pattern, combined)
-                    if match:
-                        # Определяем, где тип, высота, длина
-                        groups = match.groups()
-                        # Первая группа — всегда тип (если есть буквы перед ним, то это 2-я группа)
-                        if rad_type is None:
-                            # Пробуем найти тип среди групп
-                            for g in groups:
-                                if g in ['10', '20', '30']:
-                                    rad_type = g
-                                    break
-                        if height is None:
-                            for g in groups:
-                                try:
-                                    h = int(g)
-                                    if h in self.VALID_HEIGHTS or h in self.HEIGHT_MAPPING:
-                                        height = h
-                                        break
-                                except:
-                                    pass
-                        if length is None:
-                            for g in groups:
-                                try:
-                                    l = int(g)
-                                    if 400 <= l <= 3000 and l % 100 == 0:
-                                        length = l
-                                        break
-                                except:
-                                    pass
-                        if rad_type and height and length:
-                            logger.info(f"  [HYGIENE] Извлечено из краткого формата: тип={rad_type}, h={height}, l={length}")
-                            break
+                    if not match:
+                        continue
+                    
+                    groups = list(match.groups())
+                    
+                    # Определяем тип: 10, 20, 30
+                    if rad_type is None:
+                        for i, g in enumerate(groups):
+                            if g in ['10', '20', '30']:
+                                rad_type = g
+                                groups[i] = None  # исключаем использованное число
+                                break
+                    
+                    # Определяем высоту и длину из оставшихся чисел
+                    remaining = [int(g) for g in groups if g is not None and g.isdigit()]
+                    
+                    if height is None and remaining:
+                        # Высота — это первое число, которое в VALID_HEIGHTS
+                        for i, num in enumerate(remaining):
+                            if num in self.VALID_HEIGHTS:
+                                height = num
+                                remaining.pop(i)
+                                break
+                            elif num in self.HEIGHT_MAPPING:
+                                height = self.HEIGHT_MAPPING[num]
+                                remaining.pop(i)
+                                break
+                    
+                    if length is None and remaining:
+                        # Длина — оставшееся число, валидное по длине
+                        for i, num in enumerate(remaining):
+                            if 400 <= num <= 3000 and num % 100 == 0:
+                                length = num
+                                remaining.pop(i)
+                                break
+                    
+                    if rad_type and height and length:
+                        logger.info(
+                            f"  [HYGIENE] Извлечено из краткого формата: "
+                            f"тип={rad_type}, h={height}, l={length}"
+                        )
+                        break
+                    else:
+                        # Если не получилось — сбрасываем и пробуем следующий паттерн
+                        rad_type = None
+                        height = None
+                        length = None
             
             # ================================================================
-            # ШАГ 4: ЕСЛИ НЕ НАШЛИ — ПЫТАЕМСЯ ИЗВЛЕЧЬ ТРИПЛЕТ ЧИСЕЛ
+            # ШАГ 4: УНИВЕРСАЛЬНЫЙ ТРИПЛЕТ (три числа в любом месте)
+            # ИСПРАВЛЕНО: исключаем уже использованные числа
             # ================================================================
             if rad_type is None or height is None or length is None:
-                # Ищем три числа через разделители
                 sep = r'[-/xх\s]+'
-                triplet_pattern = r'(?<!\d)(\d{2,4})\s*' + sep + r'\s*(\d{3,4})\s*' + sep + r'\s*(\d{3,4})(?!\d)'
+                triplet_pattern = r'(?<!\d)(\d{2,4})\s*' + sep + r'\s*(\d{2,4})\s*' + sep + r'\s*(\d{2,4})(?!\d)'
                 match = re.search(triplet_pattern, combined)
                 if match:
-                    first = match.group(1)
-                    second = match.group(2)
-                    third = match.group(3)
+                    raw_nums = [match.group(1), match.group(2), match.group(3)]
                     
-                    # Определяем, что есть что
-                    # Тип: 10, 20, 30
-                    # Высота: 300, 400, 500, 600, 900
-                    # Длина: от 400 до 3000
-                    
-                    # Пробуем определить тип
-                    candidates = [first, second, third]
-                    for c in candidates:
-                        if c in ['10', '20', '30']:
-                            rad_type = c
-                            candidates.remove(c)
-                            break
-                    
-                    # Если тип не нашли — пробуем по числовым значениям
+                    # Определяем тип
                     if rad_type is None:
-                        for c in candidates:
-                            try:
-                                val = int(c)
-                                if 10 <= val <= 33:
-                                    rad_type = str(val)
-                                    candidates.remove(c)
-                                    break
-                            except:
-                                pass
+                        for i, g in enumerate(raw_nums):
+                            if g in ['10', '20', '30']:
+                                rad_type = g
+                                raw_nums[i] = None
+                                break
                     
-                    # Определяем высоту и длину
-                    if rad_type and len(candidates) >= 2:
-                        # Преобразуем оставшиеся числа в int
-                        nums = []
-                        for c in candidates:
-                            try:
-                                nums.append(int(c))
-                            except:
-                                pass
-                        
-                        # Сортируем по размеру (высота обычно меньше длины)
-                        if len(nums) >= 2:
-                            # Высота: 300, 400, 500, 600, 900
-                            # Длина: от 400 до 3000
-                            for n in nums:
-                                if n in self.VALID_HEIGHTS or n in self.HEIGHT_MAPPING:
-                                    height = n
-                                    nums.remove(n)
+                    # Собираем оставшиеся числа
+                    remaining = []
+                    for g in raw_nums:
+                        if g is None:
+                            continue
+                        try:
+                            remaining.append(int(g))
+                        except ValueError:
+                            pass
+                    
+                    # Высота
+                    if height is None:
+                        for i, num in enumerate(remaining):
+                            if num in self.VALID_HEIGHTS:
+                                height = num
+                                remaining.pop(i)
+                                break
+                            elif num in self.HEIGHT_MAPPING:
+                                height = self.HEIGHT_MAPPING[num]
+                                remaining.pop(i)
+                                break
+                    
+                    # Длина
+                    if length is None:
+                        for i, num in enumerate(remaining):
+                            if 400 <= num <= 3000 and num % 100 == 0:
+                                length = num
+                                remaining.pop(i)
+                                break
+                            elif num < 40:  # код длины типа 12 = 1200
+                                if 400 <= num * 100 <= 3000:
+                                    length = num * 100
+                                    remaining.pop(i)
                                     break
-                            # Оставшееся число — длина
-                            if height is not None and nums:
-                                length = nums[0]
-                                if length < 400:
-                                    length = length * 100
-                            elif height is None and nums:
-                                # Если не нашли высоту — пробуем определить по размеру
-                                if nums[0] in self.VALID_HEIGHTS or nums[0] in self.HEIGHT_MAPPING:
-                                    height = nums[0]
-                                    if len(nums) > 1:
-                                        length = nums[1]
-                                elif nums[1] in self.VALID_HEIGHTS or nums[1] in self.HEIGHT_MAPPING:
-                                    height = nums[1]
-                                    length = nums[0]
-                                else:
-                                    # По умолчанию: меньшее = высота, большее = длина
-                                    height = min(nums[0], nums[1])
-                                    length = max(nums[0], nums[1])
-                                    if height < 400:
-                                        height = height * 100
-                                    if length < 400:
-                                        length = length * 100
-                            
-                            logger.info(f"  [HYGIENE] Извлечено из триплета: тип={rad_type}, h={height}, l={length}")
+                    
+                    if rad_type and height and length:
+                        logger.info(
+                            f"  [HYGIENE] Извлечено из триплета: "
+                            f"тип={rad_type}, h={height}, l={length}"
+                        )
             
             # ================================================================
             # ШАГ 5: ВАЛИДАЦИЯ
@@ -814,7 +817,6 @@ class SpecNormalizer:
                 if height in self.HEIGHT_MAPPING:
                     height = self.HEIGHT_MAPPING[height]
                 else:
-                    # Ищем ближайшую допустимую высоту
                     closest = min(self.VALID_HEIGHTS, key=lambda h: abs(h - height))
                     if abs(closest - height) <= 100:
                         height = closest
@@ -835,12 +837,11 @@ class SpecNormalizer:
             # ================================================================
             # ШАГ 6: ОПРЕДЕЛЕНИЕ ПОДКЛЮЧЕНИЯ
             # ================================================================
-            connection = "HV-правое"  # По умолчанию
+            connection = "HV-правое"
             
-            # Проверяем на левое
             left_patterns = [
-                r'\bлевое\b', r'\bлев\b', r'\bлев\.', r'\bла\b', r'\bla\b',
-                r'\bleft\b', r'\bl\b(?![a-z])',
+                r'\bлевое\b', r'\bлевый\b', r'\bлевая\b', r'\bлев\w*\b',
+                r'\bла\b', r'\bla\b', r'\bleft\b', r'\bl\b(?![a-z])',
             ]
             for pattern in left_patterns:
                 if re.search(pattern, combined):
@@ -848,12 +849,14 @@ class SpecNormalizer:
                     logger.info(f"  [HYGIENE] Определено левое подключение")
                     break
             
-            # Проверяем на боковое (если не левое)
             if connection != "HV-левое":
                 side_patterns = [
-                    r'\bбоковое\b', r'\bбок\b', r'\bбок\.',
-                    r'\bh-боковое\b', r'\bh боковое\b',
-                    r'\bhygiene\s*\(h\)\b',
+                    r'\bбоков\w*',
+                    r'\bh[-\s]?боков\w*',
+                    r'\bhygiene\s*\(h\)',
+                    r'\bh[-\s]?10\b',
+                    r'\bh[-\s]?20\b',
+                    r'\bh[-\s]?30\b',
                 ]
                 for pattern in side_patterns:
                     if re.search(pattern, combined):
@@ -861,25 +864,12 @@ class SpecNormalizer:
                         logger.info(f"  [HYGIENE] Определено боковое подключение")
                         break
             
-            # Проверяем на правое (если не левое и не боковое)
-            if connection == "HV-правое":
-                right_patterns = [
-                    r'\bправое\b', r'\bправ\b', r'\bправ\.',
-                    r'\bра\b', r'\bra\b', r'\bright\b',
-                    r'\br\b(?![a-z])',
-                ]
-                for pattern in right_patterns:
-                    if re.search(pattern, combined):
-                        logger.info(f"  [HYGIENE] Определено правое подключение")
-                        break
-            
-            # Если тип 20 и подключение HV-левое — исправляем на HV-правое
-            if rad_type == '20' and connection == "HV-левое":
+            if rad_type in ('20', '30') and connection == "HV-левое":
                 connection = "HV-правое"
-                logger.info(f"  [HYGIENE] Тип 20 универсальный, исправлено на HV-правое")
+                logger.info(f"  [HYGIENE] Тип {rad_type} универсальный, исправлено на HV-правое")
             
             # ================================================================
-            # ШАГ 7: ОПРЕДЕЛЕНИЕ БРЕНДА
+            # ШАГ 7: БРЕНД
             # ================================================================
             brand = ""
             for known_brand in self.KNOWN_BRANDS:
@@ -888,7 +878,7 @@ class SpecNormalizer:
                     break
             
             # ================================================================
-            # ШАГ 8: СОЗДАЁМ РЕЗУЛЬТАТ
+            # ШАГ 8: РЕЗУЛЬТАТ
             # ================================================================
             result = ParsedRadiator()
             result.recognized = True
@@ -900,7 +890,10 @@ class SpecNormalizer:
             result.source = "hygiene"
             result.brand = brand
             
-            logger.info(f"  [HYGIENE] ✅ ИТОГ: {connection}, тип {rad_type}, {height}×{length}, бренд={brand}")
+            logger.info(
+                f"  [HYGIENE] ✅ ИТОГ: {connection}, тип {rad_type}, "
+                f"{height}×{length}, бренд={brand}"
+            )
             
             return result
             
@@ -913,45 +906,93 @@ class SpecNormalizer:
     # ================================================================
     def _parse_evra_format(self, text: str, original: str = "") -> Optional[ParsedRadiator]:
         """
-        УНИВЕРСАЛЬНЫЙ ПАРСЕР ДЛЯ РАДИАТОРОВ EVRA
-        Распознаёт все форматы:
-        - {type}CV-{height}-{length}[ L|L|]
-        - {type}C-{height}-{length}[ L|L|]
-        
-        Где:
-        - type: 10, 11, 20, 21, 22, 30, 33
-        - height: 300, 400, 500, 600, 900
-        - length: от 400 до 3000 с шагом 100
-        - L или R в конце (опционально)
+        УНИВЕРСАЛЬНЫЙ ПАРСЕР ДЛЯ РАДИАТОРОВ EVRA (и похожих форматов).
+        Распознаёт все варианты записи артикула:
+        - {type}CV-{height}-{length}      (например, 21CV-500-1000)
+        - CV{type}s-{height}-{length}     (например, CV21s-500-1000)
+        - CV{type}-{height}-{length}      (например, CV21-500-1000)
+        - CVL{type}-{height}-{length}     (например, CVL33-500-900) — L = левое
+        - CVR{type}-{height}-{length}     (например, CVR33-500-900) — R = правое
+        - CV{type}-{height}-{length}      (например, CV33-500-800)
+        - C{type}s-{height}-{length}      (например, C21s-500-600)
+        - C{type}-{height}-{length}       (например, C22-300-1400)
+
+        Универсальный принцип:
+        - буквенный префикс: C, CV, VK, K (в любом регистре)
+        - необязательный суффикс стороны: L, R, S (в любом регистре)
+        - тип: 2 цифры
+        - высота: 3-4 цифры
+        - длина: 3-4 цифры
+        - в конце может быть L/R/s (сторона)
+
+        Приоритет определения стороны:
+        1. Суффикс в артикуле (L → левое, R → правое).
+        2. Слово в тексте (левым, правым, слева, справа, left, right).
+        3. По умолчанию — VK-правое (для VK-типов) / K-боковое (для C-типов).
         """
         try:
             import re
-            
+
             # Объединяем текст для поиска
             combined = (text + " " + original).strip()
-            
+
             # ================================================================
             # ШАГ 1: ИЩЕМ ПАТТЕРН
             # ================================================================
-            # Паттерн: тип + CV или C + высота + длина + опционально L/R
-            # Примеры: 22CV-300-700 L, 33C-500-1000, 11CV-500-400L
-            pattern = r'\b(\d{2})(CV|C)[\-](\d{3,4})[\-](\d{3,4})\s*([LR]?)\b'
+            # Универсальный паттерн:
+            # - \b — граница слова
+            # - ([ckv]{1,3}) — буквенный префикс: C, K, V, CV, VK, CK, KK и т.д.
+            # - (l|r|s)? — необязательный суффикс стороны (L, R, S)
+            # - (\d{2}) — тип (2 цифры)
+            # - ([lrs])? — необязательный суффикс стороны после типа (для CV21s)
+            # - [\-\s]+ — разделитель (дефис или пробел)
+            # - (\d{3,4}) — высота
+            # - [\-\s]+ — разделитель
+            # - (\d{3,4}) — длина
+            # - \s*([lrs])? — необязательный суффикс стороны в конце
+            pattern = (
+                r'\b([ckv]{1,3})'
+                r'(l|r|s)?'
+                r'(\d{2})'
+                r'([lrs])?'
+                r'[\-\s]+'
+                r'(\d{3,4})'
+                r'[\-\s]+'
+                r'(\d{3,4})'
+                r'\s*([lrs])?'
+                r'\b'
+            )
             match = re.search(pattern, combined, re.IGNORECASE)
-            
+
             if not match:
                 return None
-            
+
             # ================================================================
             # ШАГ 2: ИЗВЛЕКАЕМ ДАННЫЕ
             # ================================================================
-            rad_type = match.group(1)        # 22, 33, 11, etc.
-            connection_type = match.group(2).upper()  # CV или C
-            height_str = match.group(3)      # 300, 500, etc.
-            length_str = match.group(4)      # 700, 1100, etc.
-            side = match.group(5).upper()    # L, R, или пусто
-            
+            prefix = match.group(1).upper()          # C, CV, VK, K, ...
+            side_before_type = match.group(2)         # L, R, S или None
+            rad_type = match.group(3)                 # 21, 33, 11, ...
+            side_after_type = match.group(4)          # L, R, S или None
+            height_str = match.group(5)               # 300, 500, ...
+            length_str = match.group(6)               # 700, 1100, ...
+            side_at_end = match.group(7)              # L, R, S или None
+
             # ================================================================
-            # ШАГ 3: ПРОВЕРЯЕМ ВАЛИДНОСТЬ ТИПА
+            # ШАГ 3: ОПРЕДЕЛЯЕМ ТИП ПОДКЛЮЧЕНИЯ (VK или K)
+            # ================================================================
+            # Если префикс содержит V (CV, VK, V) — это VK (нижнее подключение)
+            # Если префикс содержит только C или K — это K (боковое подключение)
+            if 'V' in prefix:
+                base_connection = "VK"
+            elif 'K' in prefix:
+                base_connection = "K"
+            else:
+                # Только C — это EVRA Compact (боковое подключение)
+                base_connection = "K"
+
+            # ================================================================
+            # ШАГ 4: ПРОВЕРЯЕМ ВАЛИДНОСТЬ ТИПА
             # ================================================================
             if rad_type not in ['10', '11', '20', '21', '22', '30', '33']:
                 # Тип 12 преобразуем в 21
@@ -959,15 +1000,15 @@ class SpecNormalizer:
                     rad_type = '21'
                 else:
                     return None
-            
+
             # ================================================================
-            # ШАГ 4: ПРОВЕРЯЕМ ВЫСОТУ
+            # ШАГ 5: ПРОВЕРЯЕМ ВЫСОТУ
             # ================================================================
             try:
                 height = int(height_str)
             except ValueError:
                 return None
-            
+
             # Допустимые высоты: 300, 400, 500, 600, 900
             if height not in [300, 400, 500, 600, 900]:
                 # Пытаемся исправить через HEIGHT_MAPPING
@@ -975,56 +1016,67 @@ class SpecNormalizer:
                     height = self.HEIGHT_MAPPING[height]
                 else:
                     return None
-            
+
             # ================================================================
-            # ШАГ 5: ПРОВЕРЯЕМ ДЛИНУ
+            # ШАГ 6: ПРОВЕРЯЕМ ДЛИНУ
             # ================================================================
             try:
                 length = int(length_str)
             except ValueError:
                 return None
-            
+
             # Допустимые длины: от 400 до 3000 с шагом 100
             if length < 400 or length > 3000 or length % 100 != 0:
-                # Пытаемся округлить
                 rounded = round(length / 100) * 100
                 if 400 <= rounded <= 3000:
                     length = rounded
                 else:
                     return None
-            
+
             # ================================================================
-            # ШАГ 6: ОПРЕДЕЛЯЕМ ПОДКЛЮЧЕНИЕ
+            # ШАГ 7: ОПРЕДЕЛЯЕМ СТОРОНУ ПОДКЛЮЧЕНИЯ
             # ================================================================
-            
-            # Базовое подключение: CV = VK (нижнее), C = K (боковое)
-            if connection_type == 'CV':
-                base_connection = "VK"
-            else:  # 'C'
-                base_connection = "K"
-            
-            # Универсальные типы (20, 21, 22) — всегда VK-правое
-            # У них нет левого исполнения, игнорируем L/R
-            if rad_type in ['20', '21', '22']:
-                if base_connection == "VK":
-                    final_connection = "VK-правое"
-                else:
-                    # Для типа 22 с C (боковое) — оставляем K-боковое
-                    final_connection = "K-боковое"
+            # Собираем все суффиксы стороны из артикула
+            side_from_article = None
+            for s in (side_before_type, side_after_type, side_at_end):
+                if s:
+                    s_upper = s.upper()
+                    if s_upper == 'L':
+                        side_from_article = 'left'
+                        break
+                    elif s_upper == 'R':
+                        side_from_article = 'right'
+                        break
+                    # 'S' — это симметричный/универсальный, сторону не определяет
+
+            # Определяем сторону по тексту
+            side_from_text = self._determine_side(text, original)
+
+            # Приоритет:
+            # 1. Суффикс в артикуле (если есть)
+            # 2. Слово в тексте (если есть)
+            # 3. По умолчанию — None
+            if side_from_article is not None:
+                side = side_from_article
+            elif side_from_text is not None:
+                side = side_from_text
             else:
-                # Направленные типы (10, 11, 30, 33)
-                if base_connection == "VK":
-                    # VK-нижнее: L → левое, R или пусто → правое
-                    if side == 'L':
-                        final_connection = "VK-левое"
-                    else:
-                        final_connection = "VK-правое"
-                else:
-                    # K-боковое: всегда K-боковое (левого/правого нет)
-                    final_connection = "K-боковое"
-            
+                side = None
+
             # ================================================================
-            # ШАГ 7: СОЗДАЁМ РЕЗУЛЬТАТ
+            # ШАГ 8: ФОРМИРУЕМ ПОДКЛЮЧЕНИЕ
+            # ================================================================
+            if base_connection == "VK":
+                if side == 'left':
+                    final_connection = "VK-левое"
+                else:
+                    final_connection = "VK-правое"
+            else:  # K
+                # K-боковое — всегда K-боковое (левого/правого нет)
+                final_connection = "K-боковое"
+
+            # ================================================================
+            # ШАГ 9: СОЗДАЁМ РЕЗУЛЬТАТ
             # ================================================================
             result = ParsedRadiator()
             result.recognized = True
@@ -1035,9 +1087,9 @@ class SpecNormalizer:
             result.confidence = 0.98
             result.source = "evra_format"
             result.brand = "evra"
-            
+
             return result
-            
+
         except Exception as e:
             self._log(f"EVRA format parser error: {e}", "ERROR")
             return None
@@ -2571,6 +2623,21 @@ class SpecNormalizer:
             if 'kermi' in original_lower and result.rad_type == '12':
                 result.rad_type = '21'
                 result.warnings.append("Kermi тип 12 преобразован в 21")
+
+            # ================================================================
+            # ЗАЩИТА ГИГИЕНИЧЕСКИХ ПОДКЛЮЧЕНИЙ
+            # Если источник — hygiene, не даём перебить подключение
+            # ================================================================
+            if result.source == "hygiene":
+                # Гигиенические подключения оставляем как есть
+                if result.connection not in ('H-боковое', 'HV-правое', 'HV-левое'):
+                    # Если вдруг что-то пошло не так — ставим безопасное значение
+                    result.connection = 'HV-правое'
+                # Универсальные типы 20/30 не имеют левого исполнения
+                if result.rad_type in ('20', '30') and result.connection == 'HV-левое':
+                    result.connection = 'HV-правое'
+                    result.warnings.append(f"Тип {result.rad_type} универсальный, HV-левое → HV-правое")
+                return result
 
             # Универсальные типы 20/21/22 с VK-левым -> VK-правое
             if result.connection == "VK-левое" and result.rad_type in ('20', '21', '22'):

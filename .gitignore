@@ -1,19 +1,39 @@
-# Python bytecode
+# Python
 __pycache__/
-*.py[cod]
-*$py.class
-
-# Python virtual environments
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
 venv/
 env/
-.venv/
 
-# IDE settings
-.idea/
+# IDE
 .vscode/
-*.swp
-*.swo
+.idea/
 
-# OS files
+# PyInstaller
+build/
+dist/
+*.spec
+
+# Логи и временные
+*.log
+~$*
+*.tmp
+
+# ОС
 .DS_Store
 Thumbs.db
+
+# Пользовательские настройки
+settings.json
+
+# Отладочные скрипты (по желанию — если не хотите их в репо)
+test.py
+test_*.py
+inspect_xlsx.py
+tabl.pdf
+
+# Скачанные страницы (если не часть проекта)
+Avonflow S-2K*.html

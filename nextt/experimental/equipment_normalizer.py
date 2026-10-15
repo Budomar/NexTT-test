@@ -1,7 +1,8 @@
 """
-equipment_normalizer.py - Версия 6.1
+equipment_normalizer.py - Версия 7.0
 Универсальный поиск по параметрам с поддержкой суффиксов RN и приоритетом бренда LaggarTT.
 Добавлена поддержка артикулов бойлеров (7U..., 7I...) и фланцев (B-01).
+Скоринг нормализован в [0, 1], убраны двойные штрафы.
 """
 import re
 from typing import Dict, Optional, Tuple, List, Any
@@ -13,6 +14,7 @@ from .product_normalizer import ProductNormalizer, ProductParams
 
 logger = get_logger(__name__)
 
+
 @dataclass
 class ParsedEquipment:
     """Результат парсинга названия оборудования."""
@@ -22,8 +24,7 @@ class ParsedEquipment:
     confidence: float = 0.0
     source: str = ""
     warnings: List[str] = field(default_factory=list)
-    
-    # Дополнительные параметры
+
     brand: str = ""
     category: str = ""
     power_kw: Optional[int] = None
@@ -35,21 +36,21 @@ class ParsedEquipment:
     has_wifi: bool = False
     has_ot: bool = False
 
+
 class EquipmentNormalizer:
     """
     УНИВЕРСАЛЬНЫЙ НОРМАЛИЗАТОР для названий оборудования.
-    Версия 6.1: поиск по структурированным параметрам с приоритетом бренда.
+    Версия 7.0: поиск по структурированным параметрам с приоритетом бренда.
     """
-    
+
     def __init__(self, equipment_df=None, debug: bool = True):
         self.equipment_df = equipment_df
         self.debug = debug
         self.product_normalizer = ProductNormalizer()
-        
-        # Индексы для быстрого поиска
+
         self._article_index: Dict[str, Any] = {}
-        self._params_index: List[Tuple[ProductParams, str]] = []  # (параметры, артикул)
-        
+        self._params_index: List[Tuple[ProductParams, str]] = []
+
         self._build_indices()
 
     def _log(self, message: str, level: str = "INFO") -> None:
@@ -61,253 +62,149 @@ class EquipmentNormalizer:
             else:
                 logger.info(f"[EquipmentNormalizer] {message}")
 
-    def _get_model_base(self, model: str) -> str:
-        """Получает базовую модель без суффиксов."""
-        if not model:
-            return ''
-        base = re.sub(r'[RNAMTQBCXYZ]+$', '', model.upper())
-        return base
-
-    def _extract_boiler_params_for_index(self, text: str) -> ProductParams:
-        """
-        Извлекает параметры котла из названия для индексации.
-        Специально для базы данных — учитывает суффиксы (RN, A, M, T, Q, H, C).
-        """
-        params = ProductParams(original_text=text)
-        
-        text_upper = text.upper()
-        text_normalized = self.product_normalizer._normalize(text)
-        
-        # Определяем тип и бренд 
-        params.product_type = 'boiler'
-        params.brand = self.product_normalizer._extract_brand(text)
-        
-        # ========== ИЩЕМ МОДЕЛЬ И СУФФИКС ==========
-        model_base = ""
-        suffix = ""
-        
-        # Специальная обработка для ГАЗ 6000
-        gaz_match = re.search(r'(ГАЗ|GAZ)\s*6000', text_normalized, re.IGNORECASE)
-        if gaz_match:
-            model_base = 'GAZ6000'
-            after_model = text_normalized[gaz_match.end():]
-            
-            # Ищем тип подключения и суффикс
-            # Паттерны: "24 C RN", "24C RN", "24RN", "24 H RN"
-            patterns = [
-                r'(\d*)\s*([CH])\s+([A-Z]{1,3})\b',   # 24 C RN
-                r'(\d*)([CH])\s+([A-Z]{1,3})\b',      # 24C RN
-                r'(\d*)([A-Z]{1,3})\b',                # 24RN
-            ]
-            
-            for pattern in patterns:
-                match = re.search(pattern, after_model, re.IGNORECASE)
-                if match:
-                    groups = match.groups()
-                    if len(groups) >= 2:
-                        # Определяем тип подключения
-                        if groups[1] in ['C', 'H']:
-                            params.conn_type = groups[1]
-                            if len(groups) >= 3 and groups[2]:
-                                suffix = groups[2].upper()
-                        else:
-                            # Возможно суффикс без явного типа
-                            potential_suffix = groups[1].upper()
-                            if potential_suffix in ['RN', 'RNW', 'RNM', 'RNC', 'RNH']:
-                                suffix = potential_suffix
-                    break
-            
-            if suffix:
-                self._log(f"    Найден суффикс для GAZ6000: {suffix}")
-        
-        # Общий поиск моделей (для M30, B30, C30 и т.д.)
-        if not model_base:
-            model_match = re.search(r'\b([A-Z]{1,3}[0-9]{1,2})\b', text_normalized, re.IGNORECASE)
-            if model_match:
-                model_base = model_match.group(1).upper()
-                after_model = text_normalized[model_match.end():]
-                
-                # Ищем суффикс после модели
-                suffix_match = re.search(r'^\s*([A-Z]{1,3})\b', after_model, re.IGNORECASE)
-                if suffix_match:
-                    suffix = suffix_match.group(1).upper()
-                    self._log(f"    Найдена модель {model_base}, суффикс={suffix}")
-                else:
-                    self._log(f"    Найдена модель {model_base}, суффикс не найден")
-        
-        # Устанавливаем модель и суффикс (раздельно!)
-        if model_base:
-            params.model = model_base
-            if suffix:
-                params.model_suffix = suffix
-        
-        # ========== МОЩНОСТЬ ==========
-        power_match = re.search(r'(\d{2})\s*([CHСН])', text_upper)
-        if power_match:
-            params.power = int(power_match.group(1))
-            conn = power_match.group(2)
-            if conn in ['C', 'С']:
-                params.conn_type = 'C'
-            elif conn in ['H', 'Н']:
-                params.conn_type = 'H'
-        else:
-            power_match_simple = re.search(r'\b(10|12|14|18|20|24|26|28|30|32|35|36|45|60|80)\b', text_upper)
-            if power_match_simple:
-                params.power = int(power_match_simple.group(1))
-        
-        # Wi-Fi
-        params.has_wifi = any(x in text.lower() for x in ['wi-fi', 'wifi', 'вайфай', 'вафай'])
-        
-        # Для отладки
-        self._log(f"    ИТОГО: модель={params.model}, суффикс={params.model_suffix}, мощность={params.power}, тип={params.conn_type}")
-        
-        return params
-
     def _build_indices(self) -> None:
-        """Строит индекс параметров из базы данных с учётом суффиксов."""
+        """Строит индекс параметров из базы данных."""
         if self.equipment_df is None or self.equipment_df.empty:
             self._log("База данных оборудования не загружена", "WARNING")
             return
-        
+
         self._log(f"Построение индекса параметров из {len(self.equipment_df)} записей...")
-        
+
         for idx, row in self.equipment_df.iterrows():
             article = str(row.get('Артикул', '')).strip()
             name = str(row.get('Наименование', '')).strip()
-            
+
             if not article or article == 'nan' or not name or name == 'nan':
                 continue
-            
-            # ========== ОТЛАДКА: выводим все артикулы с AC ==========
-            if article.startswith('AC'):
-                self._log(f"    [ОТЛАДКА] НАЙДЕН АРТИКУЛ AC: {article} - {name[:50]}")
-            
-            # Индекс по артикулу
+
             self._article_index[article] = row
-            
-            # Извлекаем параметры из названия
-            if any(x in name.lower() for x in ['котел', 'котёл', 'газ 6000']):
-                params = self._extract_boiler_params_for_index(name)
-            else:
-                params = self.product_normalizer.extract(name)
-            
+
+            # Извлекаем параметры из названия через ProductNormalizer
+            # (для котлов ProductNormalizer делегирует в boiler_parser)
+            params = self.product_normalizer.extract(name)
             params.article = article
-            
-            if params.product_type == 'boiler':
-                self._log(f"    Индекс: {article} -> модель={params.model}, суффикс={params.model_suffix}, мощность={params.power}, тип={params.conn_type}, wifi={params.has_wifi}")
-            
+
             self._params_index.append((params, article))
-        
+
         self._log(f"Индекс построен: {len(self._params_index)} записей")
-        # ========== ДОПОЛНИТЕЛЬНАЯ ОТЛАДКА: список артикулов AC ==========
-        ac_articles = [a for a in self._article_index.keys() if a.startswith('AC')]
-        self._log(f"    [ОТЛАДКА] Артикулы AC в индексе: {ac_articles}")
 
     def _search_by_params(self, query_params: ProductParams) -> Optional[Tuple[str, str, float]]:
         """
         Поиск по параметрам с учётом типа товара и модели.
-        Если тип не определён — поиск не выполняется.
-        Если модель указана — ищем только записи с этой моделью.
+        Скоринг нормализован, без двойных штрафов.
         """
-        # ========== ВАЖНО: если тип не определён — не ищем ==========
         if not query_params.product_type or query_params.product_type == 'other':
             self._log(f"    Тип не определён, пропускаем поиск по параметрам")
             return None
-        
+
+        # ============================================================
+        # ОТСЕЧЕНИЕ МУСОРА: для котлов обязательны модель и мощность
+        # ============================================================
+        if query_params.product_type == 'boiler':
+            if not query_params.model:
+                self._log(f"    Котёл без модели — пропускаем")
+                return None
+            if not query_params.power:
+                self._log(f"    Котёл без мощности — пропускаем")
+                return None
+
+        # ============================================================
+        # ОТСЕЧЕНИЕ МУСОРА: для дымоходов нужен хотя бы один признак
+        # (размер, артикул или признак конденсации).
+        # Иначе запрос вида "Фланец" или "Дымоход" без конкретики
+        # может подобрать что угодно.
+        # ============================================================
+        if query_params.product_type == 'chimney':
+            if not (query_params.size or query_params.article_code or query_params.is_condensing):
+                self._log(f"    Дымоход без конкретики (нет размера/артикула/PP) — пропускаем")
+                return None
+
         best_match = None
         best_score = 0.0
         best_article = None
         best_name = None
-        
-        # ========== ЗАПОМИНАЕМ МОДЕЛЬ ИЗ ЗАПРОСА ==========
+
         query_model = query_params.model.upper() if query_params.model else ""
         self._log(f"    Поиск по модели: '{query_model}'")
-        
+
         for db_params, article in self._params_index:
-            # ========== СОВПАДЕНИЕ ТИПА — ОБЯЗАТЕЛЬНО ==========
+            # Тип товара должен совпадать точно
             if db_params.product_type != query_params.product_type:
                 continue
-            
-            # ========== ПРОВЕРКА МОДЕЛИ (НОВОЕ!) ==========
-            if query_model and db_params.model:
-                db_model = db_params.model.upper()
-                # Если модель указана в запросе, она должна совпадать
-                if query_model != db_model:
-                    self._log(f"    Пропускаем {article}: модель {db_model} не совпадает с {query_model}")
+
+            # Для котлов: модель и мощность обязательны
+            if query_params.product_type == 'boiler':
+                if not db_params.model:
+                    self._log(f"    Пропускаем {article}: нет модели в базе")
                     continue
-            
-            # Сравниваем параметры
-            score = query_params.matches_params(db_params)
-            
-            # Бонус за приоритет бренда LaggarTT (только если бренд не указан)
-            if not query_params.brand and db_params.brand == 'laggartt':
-                score += 0.05
-            
-            # ========== ДЛЯ КОТЛОВ: дополнительные проверки ==========
-            if query_params.product_type == 'boiler' and db_params.product_type == 'boiler':
-                
-                # 1. ШТРАФ за несовпадение типа подключения (C vs H)
+                if query_model != db_params.model.upper():
+                    continue
+                if not db_params.power:
+                    self._log(f"    Пропускаем {article}: нет мощности в базе")
+                    continue
+                if query_params.power != db_params.power:
+                    continue
+
+            # Для котлов: тип подключения должен совпадать
+            if query_params.product_type == 'boiler':
                 if query_params.conn_type and db_params.conn_type:
                     if query_params.conn_type != db_params.conn_type:
-                        score -= 0.30
-                        self._log(f"      Штраф: несовпадение типа подключения ({query_params.conn_type} vs {db_params.conn_type}) -0.30")
-                
-                # 2. Бонус/штраф за суффикс
-                if query_params.model_suffix and db_params.model_suffix:
-                    if query_params.model_suffix == db_params.model_suffix:
-                        score += 0.15
-                        self._log(f"      Бонус: совпадение суффикса {query_params.model_suffix} +0.15")
-                    else:
-                        score -= 0.10
-                        self._log(f"      Штраф: несовпадение суффикса ({query_params.model_suffix} vs {db_params.model_suffix}) -0.10")
-                elif query_params.model_suffix and not db_params.model_suffix:
-                    score -= 0.10
-                    self._log(f"      Штраф: у запроса есть суффикс {query_params.model_suffix}, у записи нет -0.10")
-                elif not query_params.model_suffix and db_params.model_suffix:
-                    score += 0.02
-                
-                # ========== 3. МОЩНОСТЬ — ЖЁСТКАЯ ПРОВЕРКА ==========
-                if query_params.power and db_params.power:
-                    if query_params.power == db_params.power:
-                        # Совпадение мощности — большой бонус
-                        score += 0.30
-                        self._log(f"      Бонус: совпадение мощности {query_params.power} +0.30")
-                    else:
-                        # НЕСОВПАДЕНИЕ МОЩНОСТИ — БОЛЬШОЙ ШТРАФ
-                        score -= 0.50
-                        self._log(f"      ШТРАФ: несовпадение мощности ({query_params.power} vs {db_params.power}) -0.50")
-            
-            # ========== ДЛЯ ДЫМОХОДОВ ==========
-            if query_params.product_type == 'chimney' and db_params.product_type == 'chimney':
-                if query_params.size and db_params.size:
-                    pass
-                elif query_params.size and not db_params.size:
-                    score -= 0.20
-                    self._log(f"      Штраф: у записи {article} нет размера, хотя у запроса есть {query_params.size} -0.20")
-                elif not query_params.size and db_params.size:
-                    score += 0.05
-                    self._log(f"      Бонус: у записи {article} есть размер {db_params.size} +0.05")
-            
+                        self._log(f"    Пропускаем {article}: тип подключения "
+                                  f"{db_params.conn_type} != {query_params.conn_type}")
+                        continue
+                elif query_params.conn_type and not db_params.conn_type:
+                    self._log(f"    Пропускаем {article}: у запроса есть тип "
+                              f"{query_params.conn_type}, у базы нет")
+                    continue
+
+            # ============================================================
+            # ЖЁСТКОЕ ОТСЕЧЕНИЕ: для дымоходов
+            # ============================================================
+            if query_params.product_type == 'chimney':
+                # Если у запроса есть размер — у базы он должен совпадать
+                if query_params.size:
+                    if not db_params.size:
+                        self._log(f"    Пропускаем {article}: нет размера в базе")
+                        continue
+                    if query_params.size != db_params.size:
+                        self._log(f"    Пропускаем {article}: размер {db_params.size} != {query_params.size}")
+                        continue
+                # Если у запроса есть артикул — у базы он должен совпадать
+                if query_params.article_code:
+                    if not db_params.article_code:
+                        self._log(f"    Пропускаем {article}: нет артикула в базе")
+                        continue
+                    self_art = query_params.article_code.replace('NEW ', '').strip()
+                    db_art = db_params.article_code.replace('NEW ', '').strip()
+                    if self_art != db_art:
+                        self._log(f"    Пропускаем {article}: артикул {db_art} != {self_art}")
+                        continue
+
+            score = query_params.matches_params(db_params)
+
+            # Лёгкий бонус за бренд LaggarTT (только если бренд не указан в запросе)
+            if not query_params.brand and db_params.brand == 'laggartt':
+                score += 0.02
+
             if score > best_score:
                 best_score = score
                 best_article = article
                 best_name = str(self._article_index[article].get('Наименование', ''))
-        
-        # ========== ПОРОГ УВЕРЕННОСТИ ==========
-        if best_score >= 0.6:
+
+        if best_score >= 0.75:
             self._log(f"    Поиск по параметрам: уверенность={best_score:.2f}")
             return (best_article, best_name, best_score)
-        
-        self._log(f"    Поиск по параметрам: лучшая уверенность={best_score:.2f} (ниже порога 0.6)")
+
+        self._log(f"    Поиск по параметрам: лучшая уверенность={best_score:.2f} (ниже порога 0.75)")
         return None
 
     def _search_by_fuzzy(self, text: str) -> Optional[Tuple[str, str, float]]:
         """Запасной поиск: нечёткое сравнение строк."""
         if not self._params_index:
             return None
-        
+
         query_normalized = self.product_normalizer._normalize(text)
-        
+
         names_list = []
         name_to_article = {}
         for db_params, article in self._params_index:
@@ -315,9 +212,9 @@ class EquipmentNormalizer:
             normalized = self.product_normalizer._normalize(name)
             names_list.append(normalized)
             name_to_article[normalized] = article
-        
+
         matches = difflib.get_close_matches(query_normalized, names_list, n=1, cutoff=0.4)
-        
+
         if matches:
             best_match = matches[0]
             confidence = difflib.SequenceMatcher(None, query_normalized, best_match).ratio()
@@ -326,16 +223,16 @@ class EquipmentNormalizer:
                 name = str(self._article_index[article].get('Наименование', ''))
                 self._log(f"    Fuzzy поиск: уверенность={confidence:.2f}")
                 return (article, name, confidence)
-        
+
         return None
 
     def normalize_and_extract(self, text: str) -> ParsedEquipment:
         """Основной метод поиска."""
         result = ParsedEquipment()
-        
+
         if not text or len(text.strip()) < 3:
             return result
-        
+
         # ========== ПРЯМОЙ ПОИСК ПО АРТИКУЛУ (ПРИОРИТЕТ 1) ==========
         article_patterns = [
             r'\b([A-Z]{2}\d{8})\b',
@@ -360,7 +257,7 @@ class EquipmentNormalizer:
                     return result
                 else:
                     self._log(f"    Артикул {article} не найден в базе, продолжаем поиск")
-        
+
         # ========== ПРИОРИТЕТ 2: ИЗВЛЕКАЕМ ПАРАМЕТРЫ ==========
         query_params = self.product_normalizer.extract(text)
         result.category = query_params.product_type
@@ -370,34 +267,30 @@ class EquipmentNormalizer:
         result.model_suffix = query_params.model_suffix
         result.connection_type = query_params.conn_type
         result.has_wifi = query_params.has_wifi
-        
+
         self._log(f"    Извлечены параметры: тип={query_params.product_type}, "
                   f"модель={query_params.model}, суффикс={query_params.model_suffix}, "
                   f"мощность={query_params.power}, тип_подкл={query_params.conn_type}, wifi={query_params.has_wifi}")
-        
+
         # ========== 2. ПОИСК ПО ПАРАМЕТРАМ ==========
         found = self._search_by_params(query_params)
         if found:
             found_article, found_name, found_confidence = found
-            
-            # ========== ПРОВЕРКА: совпадает ли мощность? ==========
+
             power_mismatch = False
             if query_params.power and query_params.product_type == 'boiler':
-                # Ищем мощность найденного артикула в индексе
                 for db_params, article in self._params_index:
                     if article == found_article and db_params.power:
                         if db_params.power != query_params.power:
                             power_mismatch = True
-                            self._log(f"    ⚠️ НЕСОВПАДЕНИЕ МОЩНОСТИ: запрос {query_params.power} кВт, найдено {db_params.power} кВт")
+                            self._log(f"    ⚠ НЕСОВПАДЕНИЕ МОЩНОСТИ: запрос {query_params.power} кВт, найдено {db_params.power} кВт")
                             result.warnings.append(f"Мощность не совпадает: запрос {query_params.power} кВт, найдено {db_params.power} кВт")
                         break
-            
-            # Если мощность не совпадает — снижаем уверенность
+
             if power_mismatch:
                 found_confidence = min(found_confidence, 0.4)
                 self._log(f"    Уверенность снижена до {found_confidence:.2f} из-за несовпадения мощности")
-            
-            # Если уверенность всё ещё выше порога — возвращаем результат
+
             if found_confidence >= 0.5:
                 result.article = found_article
                 result.name = found_name
@@ -408,7 +301,7 @@ class EquipmentNormalizer:
                 return result
             else:
                 self._log(f"    ❌ Отклонено из-за низкой уверенности: {found_confidence:.2f}")
-        
+
         # ========== 3. ЗАПАСНОЙ ПОИСК: FUZZY ==========
         found = self._search_by_fuzzy(text)
         if found:
@@ -420,7 +313,7 @@ class EquipmentNormalizer:
             result.source = "fuzzy_match"
             self._log(f"    ✅ Найдено через fuzzy поиск: {result.article} (уверенность={result.confidence:.2f})")
             return result
-        
+
         self._log(f"    ❌ НЕ НАЙДЕНО")
         return result
 
@@ -436,10 +329,10 @@ class EquipmentNormalizer:
             'confidence': 0.0,
             'source': ''
         }
-        
+
         self._log(f"Обработка строки: '{text[:80]}'")
         parsed = self.normalize_and_extract(text)
-        
+
         if parsed.recognized and parsed.article:
             result['success'] = True
             result['article'] = parsed.article
@@ -450,5 +343,5 @@ class EquipmentNormalizer:
         else:
             result['error'] = 'Не найдено в базе'
             self._log(f"  ❌ НЕ НАЙДЕНО")
-        
+
         return result

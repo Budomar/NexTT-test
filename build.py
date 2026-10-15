@@ -63,7 +63,7 @@ else:
 # ============================================================================
 args = [
     main_script,
-    "--name=NexTT-2.7",                    # ← ИМЯ ВЫХОДНОГО EXE (можно менять)
+    "--name=NexTT-3.1",                    # ← ИМЯ ВЫХОДНОГО EXE (можно менять)
     "--onefile",                           # один EXE файл
     "--windowed",                          # без консольного окна (убрать для dev)
     "--icon=" + os.path.join(resources_dir, "icon.ico"),  # иконка
@@ -90,7 +90,7 @@ hidden_imports = [
     "numpy",
     "xlrd",
     "chardet",
-    
+
     # PDF библиотеки
     "fitz",
     "pymupdf",
@@ -98,7 +98,7 @@ hidden_imports = [
     "PIL",
     "PIL.Image",
     "PIL.ImageTk",
-    
+
     # Модули приложения
     "nextt",
     "nextt.app",
@@ -108,6 +108,8 @@ hidden_imports = [
     "nextt.core.data_provider",
     "nextt.core.brackets",
     "nextt.core.normalizer",
+    "nextt.core.power_recalculator",
+    "nextt.core.radiator_selector",           
     "nextt.patterns.template_manager",
     "nextt.parsing.excel_parser",
     "nextt.parsing.pdf_parser",
@@ -116,15 +118,38 @@ hidden_imports = [
     "nextt.utils.dpi",
     "nextt.utils.window_manager",
     "nextt.utils.font_manager",
-    "nextt.utils.update_checker",           
+    "nextt.utils.update_checker",
+
+    # UI — главное окно и его модули (после рефакторинга)
     "nextt.ui.main_window",
+    "nextt.ui.main_window_styles",
+    "nextt.ui.main_window_info",
+    "nextt.ui.main_window_utils",
+    "nextt.ui.main_window_top_menu",
+    "nextt.ui.main_window_bottom",
+    "nextt.ui.main_window_state",
+    "nextt.ui.main_window_fonts",
+    "nextt.ui.main_window_temperature",
+    "nextt.ui.main_window_settings",
+    "nextt.ui.main_window_matrix_tooltip",
+    "nextt.ui.main_window_matrix",
+    "nextt.ui.main_window_import",
+    "nextt.ui.main_window_export",
+
+    # Диалоги
     "nextt.ui.dialogs.correspondence",
     "nextt.ui.dialogs.meteor_selector",
     "nextt.ui.dialogs.preview",
     "nextt.ui.dialogs.page_selector",
+    "nextt.ui.dialogs.methodology",
+    "nextt.ui.dialogs.power_reference",
+    "nextt.ui.dialogs.section_to_panel",        
+    "nextt.ui.dialogs.section_to_panel_model",  
+
+    # Экспорт
     "nextt.export.excel_writer",
     "nextt.export.spec_generator",
-    
+
     # Экспериментальные модули
     "nextt.experimental",
     "nextt.experimental.paste_handler",
@@ -134,6 +159,7 @@ hidden_imports = [
     "nextt.experimental.equipment_normalizer",
     "nextt.experimental.product_normalizer",
     "nextt.experimental.universal_parser",
+    "nextt.experimental.boiler_parser",
 ]
 
 for mod in hidden_imports:
@@ -158,11 +184,12 @@ for mod in excludes:
 # ЗАПУСК СБОРКИ
 # ============================================================================
 print("=" * 60)
-print("Сборка NexTT 2.7 с экспериментальной фичей")
+print("Сборка NexTT 3.0 с экспериментальной фичей")
 print("=" * 60)
 print(f"Главный скрипт: {main_script}")
 print(f"Ресурсы: {resources_dir}")
 print(f"Файлов данных: {len(datas)}")
+print(f"Скрытых импортов: {len(hidden_imports)}")
 print("=" * 60)
 
 pyinstaller_run(args)

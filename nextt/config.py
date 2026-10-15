@@ -19,10 +19,10 @@ class AppConfig:
             "x": 0,
             "y": 0,
             "width": 1915,
-            "height": 340,
+            "height": 402,
             "zoomed": False,
         },
-        "font_scale_factor": 1.0,  # Коэффициент масштабирования шрифтов
+        "font_scale_factor": 1.05,  # Коэффициент масштабирования шрифтов
         "preview_show_images": True,  # Показывать подсказки-картинки в окне предпросмотра
     }
 
