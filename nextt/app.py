@@ -56,7 +56,7 @@ class App:
 
     def __init__(self):
         # --- Логирование ---
-        setup_logger(level="ERROR", log_file=None)
+        setup_logger(level="INFO", log_file=None)
         
         logger.info("=" * 60)
         logger.info("Запуск NexTT 3.1")
