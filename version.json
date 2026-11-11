@@ -5,6 +5,8 @@
   "release_date": "2026-11-11",
   "is_mandatory": false,
   "whats_new": [
-  ],
+    "Улучшена стабильность работы",
+    "Исправлены обнаруженные ошибки"
+    ],
   "min_supported_version": "2.5"
 }
